@@ -1,0 +1,828 @@
+================================================================================
+    SPESIFIKASI MASTER - APLIKASI e-BKU (Elektronik Buku Kas Umum Sekolah)
+    VERSI STACK-AGNOSTIC (TIDAK TERGANTUNG BAHASA/FRAMEWORK/DATABASE)
+================================================================================
+
+TUGAS:
+Buat aplikasi web pengelolaan keuangan bantuan pemerintah di sekolah yang
+bernama "e-BKU". Dokumen ini adalah SPESIFIKASI PERILAKU (behavioral spec) —
+tidak menyebut bahasa pemrograman, framework, library, atau database tertentu.
+Anda bebas memilih stack (contoh rencana pengguna: Go + PostgreSQL + TypeScript),
+ASALKAN setiap aturan dan angka di bawah ini dipenuhi TEPAT.
+
+PERINGATAN: Dokumen ini berisi angka-angka dan aturan yang HARUS diikuti
+secara literal. Jika satu angka/aturan berubah, laporan keuangan akan salah.
+Jangan "perbaiki", "optimalkan", atau "rapikan" logika yang sudah ditentukan.
+
+================================================================================
+ATURAN EMAS (BACA DULU)
+================================================================================
+
+1. Semua perhitungan uang menggunakan aritmetika desimal EKSAK (bukan float
+   biner). Setiap hasil perkalian/pecahan DIBULATKAN ke 2 desimal dengan mode
+   ROUND HALF-EVEN (banker's rounding), bertahap di SETIAP langkah. Contoh
+   mode rounding: Python Decimal(ROUND_HALF_EVEN), Java BigDecimal
+   (RoundingMode.HALF_EVEN), .NET MidpointRounding.ToEven, Go library
+   decimal/shopspring dengan Round(2, HalfEven).
+2. Debet = uang keluar. Kredit = uang masuk.
+   Rumus saldo berjalan:  SALDO = SALDO_SEBELUM - DEBIT + KREDIT
+3. Edit tagihan = HAPUS entri ledger lama lalu BUAT ULANG dari nominal terbaru.
+   TIDAK ADA jurnal koreksi.
+4. NIP dicetak sebagai "NIP 123456789" (tanpa titik).
+5. Tanggal disimpan/transfer sebagai "YYYY-MM-DD". Dicetak dalam Bahasa
+   Indonesia, contoh "Jakarta, 31 Juli 2026".
+6. Teks laporan memakai huruf kapital untuk judul (misal "BUKU KAS UMUM").
+7. Jangan tambahkan fitur yang tidak ada di dokumen ini. Ikuti checklist QA
+   di bagian akhir sampai LULUS SEMUA.
+
+================================================================================
+1. MODEL DATA (12 TABEL LOGIS)
+================================================================================
+
+Semua id adalah integer auto-increment. Semua relasi memakai foreign key.
+Jangan gunakan tipe float untuk kolom uang — gunakan tipe desimal presisi
+penuh / integer sen (misal Postgres NUMERIC(18,2)).
+
+BANTUAN
+  id, nama, nama_rekening, nomor_rekening, bank, npwp,
+  kepala_sekolah, nip_kepala_sekolah, bendahara, nip_bendahara,
+  nominal (nullable), created_at
+
+SALDO_AWAL
+  id, bantuan_id (UNIQUE), saldo_awal, tanggal, created_at
+
+TRX_INVOICE  (tagihan)
+  id, bantuan_id, tanggal, nomor_bukti, uraian, bruto,
+  jenis_menu (1-5), flag_ppn (1=Ya/2=Tidak), flag_pph (1=PPh22/2=PPh23/3=Tidak),
+  kategori_narasumber (1-4, nullable), dpp, dpp_nilai_lain, nilai_ppn, nilai_pph,
+  jenis_pph, nilai_netto, nama_rekening, nomor_rekening, bank, npwp,
+  nomor_bupot_ppn, nomor_bupot_pph, biaya_admin_dibebankan (default 'tidak'),
+  sort_order, created_at
+
+TRX_LEDGER  (Buku Kas Umum)
+  id, bantuan_id, nomor (urut, mulai 1), tanggal, nomor_bukti, uraian,
+  debit, kredit, saldo, invoice_id (nullable), jenis_transaksi,
+  nomor_bupot (nullable), created_at
+
+TRX_BANK_LEDGER  (Buku Kas Bank)
+  id, bantuan_id, nomor (urut, mulai 1), tanggal, nomor_bukti, uraian,
+  debit, kredit, saldo, invoice_id (nullable), jenis_transaksi, created_at
+
+REKAP_PAJAK
+  id, bantuan_id, tanggal_posting, ntbn, ntpn, invoice_id (nullable),
+  jasa_giro (default 0), setor_ledger_id (nullable), jenis_pajak
+  ('PPN'/'PPh 21'/'PPh 22'/'PPh 23'), created_at
+
+JASA_GIRO
+  id, bantuan_id, tanggal, nominal, uraian, created_at
+
+KEGIATAN
+  id, bantuan_id, nama, created_at
+
+SUB_KEGIATAN
+  id, kegiatan_id, nama, created_at
+
+KOMPONEN
+  id, sub_kegiatan_id, nama, created_at
+
+TRX_INVOICE_REALISASI  (realisasi belanja per komponen)
+  id, invoice_id, komponen_id, bruto, nilai_ppn, nilai_pph, nilai_netto, created_at
+
+PENCAIRAN_HIBAH
+  id, bantuan_id, tahap (1,2,...), tanggal, nominal, keterangan, created_at
+
+NILAI enum jenis_transaksi pada TRX_LEDGER & TRX_BANK_LEDGER:
+  saldo_awal, pembayaran, pungut_ppn, pungut_pph, setor_pajak,
+  jasa_giro, biaya_admin, manual
+
+FORMAT UANG:
+  - Input & penyimpanan: desimal eksak, 2 desimal.
+  - Tampilan UI (tabel/web): "Rp.1.000.000" (tanpa desimal, ribuan pakai titik,
+    prefix "Rp.", tanpa spasi). Untuk nilai 0 -> "Rp.0".
+  - Laporan cetak (Excel/PDF/Word): "1.000.000" (tanpa "Rp", ribuan pakai titik,
+    TANPA desimal).
+  - Format IDR di isi uraian/notif: "Rp 1.000.000,00" (desimal 2 digit,
+    ribuan titik, koma desimal).
+
+================================================================================
+2. MESIN PAJAK (hitung_pajak) — FUNGSI PALING KRITIS
+================================================================================
+
+Masukan:
+  bruto              = nilai brutto (rupiah)
+  jenis_menu         = 1 Barang/Jasa, 2 Honor Narasumber, 3 Honor Peserta,
+                       4 Transport Narasumber, 5 Uang Harian Narasumber
+  flag_ppn           = 1 (PPN termasuk bruto) atau 2 (tidak); default 2
+  flag_pph           = 1 (PPh 22), 2 (PPh 23), 3 (tidak ada); default 3
+  kategori_narasumber= 1 Gol I/II, 2 Gol III, 3 Gol IV, 4 Non PNS (nullable)
+
+Keluaran (semua dibulatkan HALF-EVEN 2 desimal bertahap):
+  dpp, dpp_nilai_lain, nilai_ppn, nilai_pph, jenis_pph (label), nilai_netto
+
+TARIF:
+  PPN                 = 12%
+  PPh 22              = 1,5%   (flag_pph=1)
+  PPh 23              = 2%     (flag_pph=2)
+  PPh 21 Gol III      = 5%     (kategori=2)
+  PPh 21 Gol IV       = 15%    (kategori=3)
+  PPh 21 Non PNS      = 2,5%   (kategori=4)  -> 5% x 50%
+  PPh 21 Honor Peserta= 5%     (jenis_menu=3)
+
+ALGORITMA:
+  jenis_menu == 1 (Barang/Jasa):
+    jika flag_ppn == 1:
+      dpp             = bulat2(bruto * 100 / 111)
+      dpp_nilai_lain  = bulat2(dpp * 11 / 12)
+      nilai_ppn       = bulat2(dpp_nilai_lain * 12%)
+    jika flag_ppn == 2:
+      dpp             = bruto
+      nilai_ppn       = 0
+    jika flag_pph == 1: nilai_pph = bulat2(dpp * 1,5%); jenis_pph = 'PPh 22'
+    jika flag_pph == 2: nilai_pph = bulat2(dpp * 2%);    jenis_pph = 'PPh 23'
+    jika flag_pph == 3: nilai_pph = 0; jenis_pph = null
+
+  jenis_menu == 2 (Honor Narasumber) — PPN selalu 0:
+    kategori 1: nilai_pph = 0; jenis_pph = null
+    kategori 2: nilai_pph = bulat2(bruto * 5%);  jenis_pph = 'PPh 21 Gol II'
+    kategori 3: nilai_pph = bulat2(bruto * 15%); jenis_pph = 'PPh 21 Gol IV'
+    kategori 4: nilai_pph = bulat2(bruto * 5% * 50%); jenis_pph = 'PPh 21 Non PNS'
+
+  jenis_menu == 3 (Honor Peserta) — PPN selalu 0:
+    nilai_pph = bulat2(bruto * 5%); jenis_pph = 'PPh 21'
+
+  jenis_menu == 4 atau 5 (Transport / Uang Harian Narasumber):
+    nilai_pph = 0; jenis_pph = null   (tanpa pajak sama sekali)
+
+  nilai_netto = bulat2(bruto - nilai_ppn - nilai_pph)
+
+  dpp / dpp_nilai_lain bernilai 0 untuk jenis_menu selain 1.
+
+TEST VECTOR WAJIB (hasil harus PERSIS seperti ini, termasuk jenis_pph yang null
+dan nilai yang float bertanda .0):
+
+  masukan(1000000, 1, 1, 2, null)
+    -> dpp 900900.9 | dpp_nilai_lain 825825.82 | ppn 99099.1 | pph 18018.02
+       | jenis_pph 'PPh 23' | netto 882882.88
+  masukan(10000000, 2, 2, 3, 3)
+    -> dpp 0 | dpp_nilai_lain 0 | ppn 0 | pph 1500000.0
+       | jenis_pph 'PPh 21 Gol IV' | netto 8500000.0
+  masukan(10000000, 2, 2, 3, 4)
+    -> dpp 0 | dpp_nilai_lain 0 | ppn 0 | pph 250000.0
+       | jenis_pph 'PPh 21 Non PNS' | netto 9750000.0
+  masukan(1000000, 3, 2, 3, null)
+    -> dpp 0 | dpp_nilai_lain 0 | ppn 0 | pph 50000.0
+       | jenis_pph 'PPh 21' | netto 950000.0
+  masukan(500000, 4, 2, 3, null)
+    -> dpp 0 | dpp_nilai_lain 0 | ppn 0 | pph 0.0
+       | jenis_pph null | netto 500000.0
+
+Jika ada satu angka yang beda -> implementasi salah. Perbaiki sampai PERSIS.
+
+JIKA tidak ada library desimal half-even di stack Anda: simpan uang sebagai
+integer sen dan implementasikan pembulatan half-even manual (tie -> ke genap),
+lalu lakukan pembulatan di setiap langkah perantara persis seperti di atas.
+
+================================================================================
+3. PENYIMPANAN & PENGHAPUSAN LEDGER (BKU & BANK)
+================================================================================
+
+BANTUAN BARU:
+- Saat bantuan dibuat dengan nominal > 0, otomatis buat 1 baris PENCAIRAN_HIBAH
+  tahap 1 dengan tanggal hari ini dan keterangan 'Pencairan awal hibah'.
+  Nominal tahap 1 (fungsi tahap_1_nominal):
+    jika nominal > 100.000.000 -> int(bulatkan nominal * 70%)
+    selain itu                 -> nominal (100%)
+- Di dashboard: jika nominal > 0 dan belum ada pencairan sama sekali,
+  buat baris pencairan tahap 1 yang sama secara otomatis.
+
+SALDO AWAL:
+- Simpan SALDO_AWAL (satu per bantuan; kalau sudah ada -> update).
+- Buat entri TRX_LEDGER 'saldo_awal' (debit 0, kredit 0, saldo = saldo_awal,
+  uraian 'Saldo Awal', nomor_bukti null). SELALU nomor 1.
+- Buat/update entri TRX_BANK_LEDGER 'saldo_awal' dengan cara sama: jika sudah
+  ada, update tanggal+saldo; jika belum, tambahkan sebagai nomor 1 (geser nomor
+  semua entri bank yang ada +1 dulu), lalu recount saldo semua entri bank
+  nomor > 1 dengan rumus saldo = saldo - debit + kredit.
+
+SAAT MENYIMPAN TAGIHAN BARU (invoice):
+1. Hitung pajak via hitung_pajak.
+2. Hitung biaya_admin:
+     BIAYA_ADMIN = 2.900
+     jika bank_penerima ada DAN bank bantuan ada DAN
+        lowercase(bank_penerima) != lowercase(bank bantuan)  -> biaya_admin = 2900
+     selain itu -> 0
+3. nilai_netto_final = hitung_pajak.netto - biaya_admin   (ini yang disimpan
+   di TRX_INVOICE.nilai_netto).
+4. Insert TRX_INVOICE. sort_order = MAX(sort_order bantuan ini) + 1.
+5. Simpan realisasi (lihat bagian 4).
+6. Generate entri BKU (TRX_LEDGER) — TANPA biaya admin:
+     a. 'pembayaran'    debit = bruto, kredit 0
+        nomor_bukti = nomor_bukti invoice, uraian = uraian invoice
+     b. 'pungut_ppn'    jika nilai_ppn > 0: kredit = nilai_ppn, debit 0,
+        nomor_bukti = nomor_bupot_ppn, uraian = "Pemungutan PPN atas {uraian}"
+     c. 'pungut_pph'    jika nilai_pph > 0: kredit = nilai_pph, debit 0,
+        nomor_bukti = nomor_bupot_pph, uraian = "Pemungutan {jenis_pph} atas {uraian}"
+     d. BERURUTAN persis: pembayaran lalu pungut_ppn lalu pungut_pph.
+        Nomor urut & saldo dihitung bertahap (saldo berikut = saldo - debit + kredit).
+7. Generate entri BANK (TRX_BANK_LEDGER):
+     a. 'pembayaran'    debit = netto_bank = bruto - nilai_ppn - nilai_pph - biaya_admin,
+        kredit 0, nomor_bukti = nomor_bukti invoice, uraian = uraian invoice
+     b. 'biaya_admin'   HANYA jika biaya_admin > 0: debit = 2900, kredit 0,
+        uraian = "Biaya Admin untuk {uraian}"
+     c. Catatan: biaya admin TIDAK PERNAH dibuat di TRX_LEDGER (BKU), hanya di
+        TRX_BANK_LEDGER.
+
+EDIT TAGIHAN:
+- HAPUS SEMUA entri TRX_LEDGER yang invoice_id = invoice (ingat posisi nomor
+  terkecilnya), lalu recount saldo semua entri BKU yang tersisa mulai dari
+  saldo entri sebelum posisi itu (saldo = saldo - debit + kredit).
+- HAPUS SEMUA entri TRX_BANK_LEDGER yang invoice_id = invoice, recount sama
+  (bank juga saldo = saldo - debit + kredit).
+- HAPUS semua TRX_INVOICE_REALISASI invoice itu.
+- UPDATE TRX_INVOICE dengan nilai baru.
+- Simpan realisasi ulang.
+- Generate ulang entri BKU + bank seperti create.
+
+HAPUS TAGIHAN:
+- Sama seperti edit, tapi invoice-nya dihapus juga. Jangan pernah membiarkan
+  saldo ledger tidak konsisten setelah penghapusan.
+
+================================================================================
+4. REALISASI BELANJA PER KOMPONEN
+================================================================================
+
+Setiap tagihan punya daftar baris realisasi: (komponen_id, bruto) dari cascading
+master data Kegiatan -> Sub Kegiatan -> Komponen.
+
+Alokasi pajak proporsional per baris:
+  total_bruto = jumlah semua bruto baris (jika <= 0, jangan simpan apa pun)
+  untuk tiap baris:
+    ratio     = bruto_baris / total_bruto
+    r_ppn     = bulat2(ppn_total * ratio)
+    r_pph     = bulat2(pph_total * ratio)
+    r_netto   = bulat2(bruto_baris - r_ppn - r_pph)
+    insert TRX_INVOICE_REALISASI (invoice_id, komponen_id, bruto_baris,
+                                  r_ppn, r_pph, r_netto)
+
+================================================================================
+5. VERSI LAPORAN REAL / RENCANA 100%
+================================================================================
+
+BKU dan Buku Kas Bank punya dua versi tampilan + export:
+  nominal      = BANTUAN.nominal, fallback ke SALDO_AWAL.saldo_awal
+  total_turun  = SUM(PENCAIRAN_HIBAH.nominal) untuk bantuan itu
+
+  versi 'rencana': offset = 0
+  versi 'real'   : jika nominal > 0 DAN total_turun < nominal:
+                     offset = total_turun - nominal   (nilai NEGATIF)
+                   selain itu offset = 0
+
+Terapkan offset ini pada tampilan/export:
+  entri 'saldo_awal' -> kredit = kredit + offset
+  semua entri        -> saldo  = saldo + offset
+(debit TIDAK berubah. Entri selain saldo_awal kreditnya tidak berubah.)
+
+Tab "Real (Dana Turun: Rp...)" dan "Rencana 100%" hanya muncul jika
+nominal > 0 dan total_turun < nominal. Param query versi = 'real'|'rencana'
+(default 'rencana'), ikut dibawa ke URL export.
+
+================================================================================
+6. PENYETORAN PAJAK (MULTI-INVOICE)
+================================================================================
+
+Halaman form setor pajak:
+- Pilih jenis_pajak: PPN | PPh 21 | PPh 22 | PPh 23.
+- Daftar checkbox invoice yang punya nilai pajak untuk jenis tersebut.
+  Nilai pajak per invoice diambil dari kolom: PPN -> nilai_ppn;
+  PPh 21 -> nilai_pph jika jenis_pph mengandung '21'; PPh 22 -> jika '22';
+  PPh 23 -> jika '23'.
+- Invoice yang SUDAH disetor untuk jenis itu di-disable dan ditandai
+  "sudah disetor" (deteksi dari baris REKAP_PAJAK yang setor_ledger_id tidak
+  null; jenis disimpulkan dari uraian entri setor: mengandung 'PPN'/'21'/'22'/'23').
+- nominal = jumlah nilai pajak dari invoice yang dicentang (readonly).
+
+Saat submit:
+- uraian     = keterangan jika diisi, selain itu "Penyetoran {jenis_pajak}"
+- nomor_bukti = "NTPN=\n{ntpn}" jika ntpn ada, selain itu
+                "NTB=\n{ntbn}" jika ntbn ada, selain itu ""
+- Buat 1 entri TRX_LEDGER 'setor_pajak': debit = nominal, kredit 0.
+- Buat 1 baris REKAP_PAJAK PER INVOICE yang dicentang:
+  (bantuan_id, tanggal_posting, ntbn, ntpn, invoice_id, jasa_giro=0,
+   setor_ledger_id = id entri setor tadi, jenis_pajak)
+- Buat 1 entri TRX_BANK_LEDGER 'setor_pajak': debit = nominal, kredit 0,
+  nomor_bukti & uraian sama.
+
+EDIT setor pajak:
+- Update entri TRX_LEDGER (tanggal, nomor_bukti, uraian, debit = nominal baru).
+- Recount saldo BKU dari entri yang mengekor (mulai entri itu).
+- DELETE semua REKAP_PAJAK dengan setor_ledger_id itu, insert ulang untuk
+  daftar invoice baru. jenis_pajak dipertahankan dari baris lama jika ada.
+- Update entri TRX_BANK_LEDGER setor_pajak terkait (via tanggal/uraian),
+  recount saldo bank.
+
+HAPUS setor pajak:
+- Hapus entri TRX_LEDGER + semua REKAP_PAJAK terkait + recount saldo BKU.
+- Hapus entri TRX_BANK_LEDGER 'setor_pajak' yang tanggal/uraiannya sama,
+  recount saldo bank.
+
+================================================================================
+7. JASA GIRO & PENCAIRAN
+================================================================================
+
+JASA GIRO:
+- Form: tanggal, nominal, uraian (default 'Jasa Giro').
+- Simpan ke JASA_GIRO.
+- Buat 1 entri TRX_LEDGER 'jasa_giro': debit 0, kredit = nominal,
+  nomor_bukti kosong, uraian seperti diisi.
+
+PENCAIRAN:
+- CRUD tahap (tahap, tanggal, nominal, keterangan). Tahap berikutnya =
+  MAX(tahap) + 1.
+- Dashboard & halaman pencairan menampilkan progress:
+  persen = total_turun / nominal; card Total Turun, Sisa, Jumlah Tahap.
+- Tidak ada entri ledger yang dibuat dari pencairan; pencairan hanya
+  memengaruhi perhitungan versi 'real' (bagian 5).
+
+================================================================================
+8. REKAP PAJAK
+================================================================================
+
+Halaman rekap pajak menampilkan 3 section:
+1) PENERIMAAN PAJAK DARI TAGIHAN
+   Satu baris per invoice, urut tanggal asc, id asc. Untuk invoice yang sudah
+   disetor, NTB/NTPN ditampilkan PER JENIS PAJAK dan digabung dalam satu cell:
+     NTB {jenis}\n= {ntbn}     (dipisah baris kosong antar jenis)
+     NTPN {jenis}\n= {ntpn}
+   Jenis pajak diambil dari REKAP_PAJAK.jenis_pajak; jika kosong, simpulkan
+   dari uraian entri setor: mengandung 'PPN' -> PPN; '21' -> PPh 21;
+   '22' -> PPh 22; '23' -> PPh 23; selain itu 'Pajak'.
+   Kolom: No, Tanggal, NTB, NTPN, Uraian, Bruto, PPN, PPh 21, PPh 22,
+   PPh 23, Total Pajak. Breakdown PPh: jika jenis_pph mengandung '21' ->
+   nilai_pph masuk kolom PPh 21; '22' -> PPh 22; '23' -> PPh 23.
+   Total Pajak = PPN + PPh (semua kolom pajak di baris itu).
+2) PENYETORAN PAJAK
+   Daftar entri TRX_LEDGER 'setor_pajak': No, Tanggal, No. Bukti, Uraian,
+   Nominal, Aksi (detail/edit/hapus).
+3) JASA GIRO
+   Daftar JASA_GIRO: No, Tanggal, Uraian, Nominal.
+
+3 ringkasan card: Total Pemungutan, Total Penyetoran, Total Jasa Giro.
+
+================================================================================
+9. REKAP BELANJA & URUTAN (drag-and-drop)
+================================================================================
+
+REKAP BELANJA:
+- Satu baris per TRX_INVOICE_REALISASI, JOIN ke invoice + komponen +
+  sub_kegiatan + kegiatan, urut: invoice.sort_order, nama kegiatan,
+  nama sub kegiatan, nama komponen.
+- Kolom: No, Kegiatan, Sub Kegiatan, Komponen,
+  Penyedia / Bank / No.Rek / NPWP (4 baris), Bruto, PPN, PPh, Netto, Uraian.
+- Footer TOTAL untuk Bruto, PPN, PPh, Netto.
+
+DRAG-AND-DROP:
+- Baris tabel BKU, Bank, dan Rekap Belanja bisa diurut ulang dengan drag.
+- Rekap Belanja: kirim {order: [invoice_id, ...]}, simpan ke TRX_INVOICE.sort_order.
+- BKU: kirim {order: [ledger_id, ...]}. Entri 'saldo_awal' SELALU dipaksa
+  tetap di nomor 1 (jangan ikut reorder). Setelah urutan baru:
+    saldo = saldo_awal.saldo (atau 0 jika tidak ada saldo_awal)
+    untuk tiap entri (kecuali saldo_awal): saldo += kredit - debit
+    simpan nomor = posisi, saldo = saldo.
+- Bank: sama, pakai tabel TRX_BANK_LEDGER.
+
+SEMUA TOMBOL HAPUS = metode POST (form/button submit), bukan link GET.
+
+================================================================================
+10. EXPORT LAPORAN (3 FORMAT x 5 LAPORAN)
+================================================================================
+
+5 LAPORAN: BKU, Buku Kas Bank, Rekap Pajak, Rekap Belanja, Daftar Tagihan.
+Format: Excel (.xlsx) TERSEDIA untuk BKU, Bank, Rekap Pajak.
+        PDF dan Word (.docx) tersedia untuk KELIMA laporan.
+
+Modal export (di semua halaman yang punya export):
+- Input tanggal cetak (default hari ini) + pilihan orientasi
+  Landscape/Portrait untuk Word.
+- Param ke URL: ?tanggal_cetak=YYYY-MM-DD&orientasi=landscape|portrait.
+- Untuk BKU & Bank tambah &versi=real|rencana mengikuti tab aktif.
+- PDF selalu landscape; param orientasi diabaikan backend untuk PDF.
+
+BLOK TANDA TANGAN (semua format):
+- "Jakarta, {tanggal_cetak}" (kanan atas, di atas kolom Bendahara)
+- Baris 2: "Kepala SMK Negeri 26 Jakarta" (kiri) | "Bendahara SMK Negeri 26
+  Jakarta" (kanan)
+- 1-4 baris kosong
+- {nama kepala} (tebal) | {nama bendahara} (tebal)
+- "NIP {nip}" (tanpa titik) | "NIP {nip}"
+
+HALAMAN LAPORAN (layout kolom sama untuk PDF & Word; Excel mirip):
+
+1) BUKU KAS UMUM / BUKU KAS BANK
+   Kolom: No | Tanggal | No. Bukti | Uraian | Debet (Rp) | Kredit (Rp) | Saldo (Rp)
+   Lebar mm: 12 | 22 | 30 | 100 | 35 | 35 | 35
+   Baris TOTAL (jumlah semua debit) + blok tanda tangan.
+   Terapkan offset versi real (bagian 5) ke kredit saldo_awal & saldo.
+   Nama file: BKU_<nama>_<YYYYMMDD> | BukuBank_<nama>_<YYYYMMDD>
+2) REKAP PAJAK
+   Kolom: No | Tanggal | NTB | NTPN | Uraian | Bruto | PPN | PPh 21 |
+          PPh 22 | PPh 23 | Total Pajak
+   Lebar mm PDF: 8 | 20 | 20 | 20 | 70 | 25 | 22 | 22 | 22 | 22 | 26
+   NTB/NTPN multi-baris (wrap). Baris TOTAL semua kolom. Tanda tangan.
+   Nama file: RekapPajak_<nama>_<YYYYMMDD>
+3) REKAP BELANJA
+   Kolom: No | Kegiatan | Sub Kegiatan | Komponen |
+          Penyedia / Bank / No.Rek / NPWP | Bruto | PPN | PPh | Netto | Uraian
+   Lebar mm: 8 | 29 | 29 | 29 | 64 | 21 | 19 | 19 | 21 | 38
+   Kolom gabungan 4 baris. Baris TOTAL. Tanda tangan.
+   Nama file: RekapBelanja_<nama>_<YYYYMMDD>
+4) DAFTAR TAGIHAN
+   Kolom: No | Tanggal | No. Bukti | Uraian | Nama Rekening / Bank / No.Rek |
+          Bruto | PPN | PPh | Admin | Netto | Jenis
+   Lebar mm: 8 | 17 | 27 | 56 | 46 | 22 | 19 | 19 | 17 | 22 | 24
+   Kolom gabungan 3 baris (nama_rekening, bank, nomor_rekening).
+   Admin = 2900 jika bank penerima != bank bantuan (case-insensitive) else 0.
+   Jenis = nama jenis_menu: 1 Barang/Jasa, 2 Honor Narasumber, 3 Honor Peserta,
+           4 Transport Narasumber, 5 Uang Harian Narasumber.
+   TIDAK ADA baris TOTAL. Tanda tangan.
+   Nama file: DaftarTagihan_<nama>_<YYYYMMDD>
+
+FORMAT WORD (semua 5 laporan):
+- Kertas A4 (bukan Letter) + margin 1 cm di 4 sisi.
+- Orientasi landscape ATAU portrait (pilihan user).
+- Lebar kolom menyesuaikan lebar halaman yang tersedia:
+  landscape = 277 mm, portrait = 190 mm (proporsionalkan dari lebar asli
+  di atas jika total melebihi lebar tersedia; sebaliknya biarkan).
+- Header tabel BERULANG otomatis di tiap halaman.
+- Baris TOTAL dan seluruh blok tanda tangan TIDAK boleh terpotong antar
+  halaman (cantSplit). Blok tanda tangan tidak boleh mulai di halaman baru
+  secara terpisah dari bagian atasnya (keepNext).
+- Nama file berakhiran .docx.
+
+FORMAT PDF:
+- A4 landscape, teks tidak boleh terpotong margin.
+- Uraian/no. bukti di-wrap (perkirakan tinggi baris dari panjang teks).
+- Jika melebihi satu halaman, lanjut halaman berikut; tanda tangan ditaruh
+  di akhir posisi berjalan.
+- Nama file berakhiran .pdf.
+
+FORMAT EXCEL (BKU/Bank):
+- Baris 1: judul (merge 7 kolom, tebal 14, center). Baris 2: nama bantuan
+  (merge, tebal 14, center).
+- Baris 4: header (putih tebal, fill biru #4472C4, border).
+- Data mulai baris 5. No. Bukti & Uraian wrap text. Kolom angka format
+  #,##0.00 rata kanan.
+- Baris TOTAL (bold, fill #D9E2F3). Blok tanda tangan di bawahnya.
+- Lebar kolom: 8 | 14 | 16 | 45 | 18 | 18 | 18. Freeze baris 4, print title 1:4.
+- Nama file .xlsx.
+
+FORMAT EXCEL (Rekap Pajak):
+- 11 kolom, header baris 4 (fill #4472C4, putih, bold), data dari baris 5.
+- NTB/NTPN wrap + rata atas. TOTAL row (bold, fill #D9E2F3). Tanda tangan.
+- Lebar kolom: 6 | 14 | 18 | 18 | 45 | 18 | 16 | 16 | 16 | 16 | 18.
+- Nama file .xlsx.
+
+================================================================================
+11. HALAMAN & ALUR UI
+================================================================================
+
+Halaman-halaman (rute/endpoint) berikut HARUS ada (nama path bebas, sesuaikan
+stack Anda; daftar di sini memakai nama path versi asli):
+
+  GET  /                        dashboard
+  GET  /export-database         download snapshot database
+  POST /import-database         upload + ganti database (validasi dulu:
+        tabel BANTUAN, TRX_INVOICE, TRX_LEDGER harus ada; back up dulu)
+  GET/POST /bantuan/tambah
+  GET/POST /bantuan/<id>/edit
+  GET/POST /bantuan/<id>/saldo-awal
+  GET/POST /bantuan/<id>/tagihan              (form tagihan baru)
+  GET/POST /bantuan/<id>/tagihan/edit/<iid>
+  GET      /bantuan/<id>/tagihan/daftar
+  GET      /bantuan/<id>/tagihan/detail/<iid>
+  GET      /bantuan/<id>/tagihan/pdf | /tagihan/word
+  GET      /bantuan/<id>/bku                   (view BKU)
+  POST     /bantuan/<id>/bku/reorder
+  GET/POST /bantuan/<id>/bku/tambah | /bku/edit/<eid>
+  POST     /bantuan/<id>/bku/hapus/<eid>
+  GET      /bantuan/<id>/bku/detail/<eid>
+  GET/POST /bantuan/<id>/bku/setor-pajak
+  GET      /bantuan/<id>/bku/setor-pajak/detail/<sid>
+  GET/POST /bantuan/<id>/bku/setor-pajak/edit/<sid>
+  POST     /bantuan/<id>/bku/setor-pajak/hapus/<sid>
+  GET/POST /bantuan/<id>/jasa-giro | /jasa-giro/tambah
+  GET      /bantuan/<id>/pencairan
+  GET/POST /bantuan/<id>/pencairan/tambah | /pencairan/edit/<pid>
+  POST     /bantuan/<id>/pencairan/hapus/<pid>
+  GET      /bantuan/<id>/bank                   (view Buku Kas Bank)
+  POST     /bantuan/<id>/bank/reorder
+  POST     /bantuan/<id>/bank/hapus/<eid>
+  GET      /bantuan/<id>/bank/export/excel | /pdf | /word
+  GET      /bantuan/<id>/laporan/excel | /laporan/pdf | /laporan/word
+  GET      /bantuan/<id>/laporan/rekap/excel | /pdf | /word
+  GET      /bantuan/<id>/rekap-pajak
+  GET      /bantuan/<id>/rekap-belanja
+  POST     /bantuan/<id>/rekap-belanja/reorder
+  GET      /bantuan/<id>/rekap-belanja/export-pdf | /export-word
+  GET/POST /bantuan/<id>/kegiatan | /kegiatan/tambah | /kegiatan/hapus/<kid>
+  GET/POST /bantuan/<id>/sub-kegiatan/tambah | /sub-kegiatan/hapus/<sid>
+  GET/POST /bantuan/<id>/komponen/tambah | /komponen/hapus/<cid>
+  GET      /api/bantuan/<id>/sub-kegiatan?kegiatan_id=X   -> [{id, nama}]
+  GET      /api/bantuan/<id>/komponen?sub_kegiatan_id=X   -> [{id, nama}]
+
+DESAIN UMUM:
+- Bootstrap 5.3 + Bootstrap Icons + SortableJS (drag-drop) via CDN.
+- Navbar biru, brand "e-BKU" + ikon kalkulator, link Dashboard.
+- Flash message (success/danger) dismissible.
+- Semua form pakai label Bahasa Indonesia. Input tanggal type=date.
+
+DASHBOARD:
+- Kartu per bantuan: nama, saldo berjalan, nominal, "Dana Turun: Rp..."
+  (jumlah tahap), bank + no. rekening, NPWP, jumlah tagihan.
+- Tombol per kartu: Lihat BKU, Buku Kas Bank, Input Tagihan, Rekap Pajak,
+  Rekap Belanja, Data Kegiatan, Jasa Giro, Pencairan, Set Saldo Awal,
+  Edit Bantuan.
+- Tombol atas: Export DB, Import DB (modal upload .db), Tambah Bantuan.
+
+FORM TAGIHAN (paling kompleks):
+- Field: tanggal, nomor_bukti, uraian, nama_rekening, npwp, bank,
+  nomor_rekening, biaya_admin_dibebankan (radio ya/tidak, default tidak),
+  jenis_menu (select), bruto.
+- Field dinamis per jenis_menu:
+  * 1 (Barang/Jasa): flag_ppn (radio Ya/Tidak, default Tidak),
+    flag_pph (select: Tidak/PPh 22/PPh 23), nomor_bupot_ppn, nomor_bupot_pph.
+  * 2 (Honor Narasumber): kategori_narasumber (select Gol I/II, Gol III,
+    Gol IV, Non PNS), nomor_bupot_pph_ns.
+  * 3 (Honor Peserta): nomor_bupot_pph_pst.
+  * 4, 5: tidak ada field pajak.
+- Card "Preview Perhitungan Pajak": DPP, DPP Nilai Lain, PPN, Jenis PPh, PPh,
+  Biaya Admin (2900 jika bank berbeda, case-insensitive), Netto. Update
+  real-time oleh JavaScript.
+- Section "Realisasi Kegiatan": baris-baris dinamis
+  (Kegiatan select -> Sub Kegiatan select -> Komponen select -> Bruto input)
+  + tombol Tambah/Hapus baris. Cascading: ganti kegiatan -> isi sub; ganti
+  sub -> isi komponen. Saat edit, prefill dari realisasi tersimpan.
+- JavaScript preview pajak mengikuti logika mesin pajak (pembulatan biasa
+  2 desimal boleh). PREVIEW HANYA INFORMASIONAL — nilai yang disimpan adalah
+  hasil hitung backend. Selisih pembulatan kecil di preview DITERIMA.
+
+BKU / BUKU KAS BANK (view):
+- Tabel: No, Tanggal, No. Bukti, Uraian, Debet, Kredit, Saldo, Aksi.
+- Warna baris: pembayaran -> biru muda; setor_pajak -> kuning muda;
+  saldo_awal -> biru kehijauan muda. Badge untuk jenis transaksi.
+- Footer TOTAL (jumlah debit & kredit). Bank juga menampilkan SALDO AKHIR.
+- Tab versi Real / Rencana 100% (hanya jika nominal > 0 dan total_turun <
+  nominal).
+- Tombol: Input Manual, Setor Pajak, Input Tagihan, Export Excel/PDF/Word.
+- Drag-drop tbody (kecuali baris saldo_awal), POST {order:[ids]}.
+- Form entri manual: tanggal, nomor_bukti, uraian, jenis_transaksi (hanya
+  saat tambah), debit, kredit.
+
+SETOR PAJAK (form): lihat bagian 6.
+REKAP PAJAK (list): lihat bagian 8. Tombol export Excel/PDF/Word.
+REKAP BELANJA: lihat bagian 9. Drag-drop reorder. Tombol export PDF/Word.
+KEGIATAN: 3 kolom (Kegiatan/Sub/Komponen), masing2 form tambah + daftar +
+  tombol hapus. Kolom komponen punya filter select Kegiatan->Sub.
+JASA GIRO: form tanggal/nominal/uraian; list tabel.
+PENCAIRAN: progress bar persen total_turun/nominal; 3 card (total turun,
+  sisa, jumlah tahap); tabel + tambah/edit/hapus.
+
+================================================================================
+12. BACKUP & IMPORT/EXPORT DATABASE
+================================================================================
+
+- Backup otomatis setiap aplikasi dimulai, simpan ke folder backup terpisah,
+  format nama berisi timestamp, retensi 10 backup terakhir (hapus yang lama).
+- Export database: unduh snapshot penuh (file .db / SQL dump).
+- Import database: terima upload file backup, VALIDASI struktur (tabel inti
+  harus ada), BACKUP dulu database yang ada, lalu ganti. File dengan ekstensi
+  salah / struktur tidak valid ditolak dengan pesan jelas.
+
+================================================================================
+13. URUTAN PEMBANGUNAN + TITIK CEK
+================================================================================
+
+Langkah 1: Siapkan proyek + model data 12 tabel + koneksi DB.
+           CEK: semua tabel terbuat, foreign key aktif.
+Langkah 2: Implementasi mesin pajak (bagian 2). CEK: 5 test vector PERSIS.
+           Jika tidak persis, JANGAN lanjut — perbaiki dulu.
+Langkah 3: Bantuan, saldo awal, pencairan otomatis tahap 1, dashboard.
+           CEK: buat bantuan nominal 150.000.000 -> otomatis pencairan tahap 1
+           105.000.000 (70%). Set saldo awal -> entri saldo_awal nomor 1 di
+           BKU & Bank.
+Langkah 4: Tagihan baru (create) + generate BKU/bank + realisasi.
+           CEK: input tagihan menciptakan 1-3 baris TRX_LEDGER dan 1-2 baris
+           TRX_BANK_LEDGER dengan saldo benar.
+Langkah 5: View BKU & Bank + edit/hapus tagihan + reorder.
+           CEK: edit tagihan = replace entri tanpa jurnal koreksi; drag-drop
+           mengubah urutan & saldo; saldo_awal tetap nomor 1.
+Langkah 6: Setor pajak multi-invoice, jasa giro, pencairan CRUD, rekap pajak.
+           CEK: setor pajak = 1 entri BKU + N baris REKAP_PAJAK + 1 entri bank;
+           rekap pajak menampilkan 3 section + 3 card.
+Langkah 7: Export Excel & PDF. CEK: buka file hasil — judul, kolom, TOTAL,
+           blok tanda tangan benar.
+Langkah 8: Export Word. CEK: file terbuka normal, A4, header tabel berulang,
+           baris TOTAL & tanda tangan tidak terpotong antar halaman,
+           orientasi landscape & portrait benar.
+Langkah 9: Semua halaman UI + JavaScript (preview pajak, cascading realisasi,
+           export modal, drag-drop).
+Langkah 10: Reorder & kegiatan & API cascading. CEK: seluruh alur dashboard
+           sampai export jalan.
+
+================================================================================
+14. CHECKLIST QA AKHIR (WAJIB LULUS SEMUA)
+================================================================================
+
+1. Aplikasi jalan tanpa error; halaman utama tampil.
+2. Tambah bantuan nominal 150.000.000 -> otomatis pencairan tahap 1 = 
+   105.000.000 (70%). Dashboard menampilkan "Dana Turun".
+3. Set saldo awal 100.000.000 -> baris "Saldo Awal" nomor 1 di BKU dan Bank.
+4. Input tagihan Barang/Jasa bruto 1.000.000, PPN Ya, PPh 23, bank penerima
+   beda dari bank bantuan -> preview Netto 882.882,88; di BKU 3 entri baru;
+   di Bank 2 entri (pembayaran 879.982,88 + biaya admin 2.900).
+   [dpp 900900.90, dpp_nilai_lain 825825.82, ppn 99099.10, pph 18018.02,
+    netto 882882.88; netto bank = 882882.88 - 2900 = 879982.88]
+5. Edit tagihan (ubah bruto) -> entri BKU & bank lama hilang, entri baru
+   muncul, saldo konsisten (tidak ada jurnal koreksi).
+6. Setor pajak PPN untuk invoice tsb -> 1 entri BKU setor_pajak (debit),
+   1 baris REKAP_PAJAK, 1 entri bank setor_pajak. Nomor bukti "NTPN=\n<value>".
+7. Rekap Pajak: section Penerimaan menampilkan invoice dengan NTB/NTPN
+   per jenis pajak.
+8. Jasa giro 10.000 -> entri BKU kredit 10.000, saldo naik.
+9. Input manual BKU (debit 5.000) -> nomor urut & saldo benar.
+10. Hapus entri manual -> saldo berikutnya ter-recount.
+11. Drag-drop BKU -> urutan & saldo berubah, saldo_awal tetap nomor 1.
+12. Versi Real/Rencana 100% muncul di BKU & Bank; versi Real menampilkan
+    saldo lebih rendah sebesar (nominal - total_turun).
+13. Export Excel BKU/Bank/Rekap: kolom benar, format angka 2 desimal,
+    baris TOTAL, blok tanda tangan benar.
+14. Export PDF: landscape A4, tidak ada teks terpotong, tanda tangan ada.
+15. Export Word BKU/Bank/Rekap/Belanja/Tagihan orientasi landscape & portrait:
+    A4, tabel penuh, tidak ada kolom melebihi lebar halaman, header berulang,
+    baris TOTAL & tanda tangan tidak terpotong antar halaman.
+16. Import DB valid -> data terganti. File non-.db / struktur salah ditolak.
+17. Export DB -> file ter-download.
+18. Semua tombol hapus = POST (tidak ada link GET untuk hapus).
+19. Tidak ada error di console saat mengklik semua tombol.
+
+================================================================================
+15. CATATAN IMPLEMENTASI (contoh rencana: Go + PostgreSQL + TypeScript)
+================================================================================
+
+Bagian ini TIDAK mengikat; hanya petunjuk agar spesifikasi di atas bisa
+dipenuhi dengan mudah di stack yang direncanakan.
+
+- UANG: simpan sebagai NUMERIC(18,2) di Postgres; di Go pakai library
+  decimal (mis. shopspring/decimal) dengan Round(2, HALF_EVEN) di SETIAP
+  langkah perantara persis seperti bagian 2. JANGAN pakai float64 untuk
+  jumlah uang.
+- TRANSaksi DB: bungkus generate-entri (tagihan, setor pajak, saldo awal,
+  edit/hapus) dalam satu transaksi database agar saldo selalu konsisten.
+- NOMOR URUT: hitung MAX(nomor)+1 di dalam transaksi yang sama, atau pakai
+  sequence; pastikan tidak ada race condition.
+- DAPATKAN ulang (recount) saldo: cukup baca entri dari nomor terkecil yang
+  terpengaruh, mulai dari saldo entri sebelumnya, lalu jalankan
+  saldo = saldo - debit + kredit untuk setiap entri sisanya.
+- FRONTEND (TypeScript): render preview pajak & cascading dropdown klien;
+  kirim nilai final ke server. Selalu percaya hasil hitung server sebagai
+  sumber kebenaran.
+- EXPORT: gunakan library yang tersedia untuk xlsx/pdf/docx; terjemahkan
+  layout kolom di bagian 10 (lebar mm, warna header #4472C4, TOTAL row,
+  blok tanda tangan, A4 + margin 1cm + header berulang + cantSplit untuk Word).
+
+================================================================================
+16. DOCKERIZE (WAJIB UNTUK STACK YANG DIRENCANAKAN: Go + PostgreSQL + TypeScript)
+================================================================================
+
+Aplikasi WAJIB bisa dijalankan dengan satu perintah:
+    docker compose up --build
+
+Bagian yang didockerize:
+1. PostgreSQL         -> container database (stateful, PAKAI volume persistent).
+2. Backend (Go)       -> container aplikasi (stateless), image multi-stage.
+3. Frontend (TS)      -> di-build jadi file statis; disajikan OLEH backend Go
+                         (di-embed ke binary) ATAU via container nginx.
+                         PILIH SATU. Disarankan di-embed ke Go agar cukup 1
+                         container aplikasi (lebih sederhana & lebih aman).
+
+JANGAN didockerize: database data (harus di volume, bukan di dalam container
+yang bisa hilang), dan jangan commit file .env ke git.
+
+--------------------------------------------------------------------------------
+16.1 docker-compose.yml (struktur minimum, sesuaikan versi image)
+--------------------------------------------------------------------------------
+
+- service "db":
+    image postgres (PIN versi mayor, mis. postgres:16-alpine — jangan pakai
+    tag "latest").
+    environment: POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB (dari .env,
+    jangan hardcode secret di compose file).
+    volumes: named volume untuk /var/lib/postgresql/data (data PERSISTEN).
+    healthcheck: pg_isready -U $POSTGRES_USER -d $POSTGRES_DB dengan interval
+    & retries cukup; pastikan status "healthy" sebelum backend start.
+    restart: unless-stopped.
+
+- service "app":
+    build: . (backend Dockerfile).
+    environment: DATABASE_URL (atau DB_HOST/DB_PORT/DB_USER/DB_PASSWORD/DB_NAME)
+    -> arahkan ke service "db".
+    depends_on:
+      db:
+        condition: service_healthy      (jangan cuma "started")
+    ports: "8080:8080" (atau port pilihan).
+    restart: unless-stopped.
+    JANGAN mount volume di container app untuk data; container app stateless.
+
+- service "web" (HANYA jika frontend tidak di-embed): nginx:alpine (pin versi),
+  serve hasil build frontend, proxy /api/* ke service app. Jika frontend
+  di-embed di Go, service ini TIDAK perlu.
+
+- Network: biarkan default compose network; tidak perlu mapping port Postgres
+  ke host (kecuali mau akses dari luar container). Blocking port 5432 ke host
+  jika tidak diperlukan.
+
+--------------------------------------------------------------------------------
+16.2 Backend (Go) Dockerfile — multi-stage WAJIB
+--------------------------------------------------------------------------------
+
+Stage 1 "builder":
+  FROM golang:<versi>-alpine  (pin versi)
+  WORKDIR /src
+  COPY go.mod go.sum ./
+  RUN go mod download
+  COPY . .
+  RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/app .
+    (CGO_ENABLED=0 agar binary statis, bisa jalan di image minimal)
+
+Stage 2 "runtime":
+  FROM alpine:<versi>  (atau distroless / scratch + certs)
+  RUN adduser -D appuser  (jalankan sebagai NON-ROOT)
+  COPY --from=builder /out/app /app
+  COPY migrasi SQL (jika terpisah) /migrations
+  USER appuser
+  EXPOSE <port>
+  CMD: jalankan migrasi database dulu, lalu start server
+       (mis. entrypoint script: migrate -> app). Healthcheck: GET /healthz.
+
+Aturan:
+  - Jangan salin file source ke image runtime — hanya binary + migrasi.
+  - Non-root user WAJIB (jangan jalankan container sebagai root).
+  - Image versi semua PIN (golang, alpine/nginx/postgres), jangan "latest".
+  - .dockerignore: node_modules, .git, .env, dist, *.db, *.log, venv.
+
+--------------------------------------------------------------------------------
+16.3 Frontend (TypeScript) — build statis
+--------------------------------------------------------------------------------
+
+- Build dengan node (multi-stage): stage build (node:<versi>-alpine, npm ci,
+  npm run build) -> hasil di /dist.
+- Sajikan via:
+  (a) Go embed: tambahkan embed.FS static + route fallback ke index.html.
+  (b) nginx container: COPY hasil build ke /usr/share/nginx/html, config
+      SPA fallback (try_files $uri /index.html) + proxy /api -> app.
+- Tidak boleh ada API key / secret di bundle frontend.
+
+--------------------------------------------------------------------------------
+16.4 Migrasi database
+--------------------------------------------------------------------------------
+
+- Skema 12 tabel (bagian 1) dibuat via file migrasi versi (mis. 001_create.sql,
+  002_...). Jangan pakai "CREATE DATABASE" di dalam container app.
+- Jalankan migrasi OTOMATIS saat container app start (sebelum listen port),
+  idempotent (pakai IF NOT EXISTS / tabel migrasi versi), agar
+  "docker compose up" langsung jadi.
+- Postgres dijalankan oleh container db dengan POSTGRES_DB yang benar;
+  app TIDAK perlu hak untuk membuat database.
+- Konfirmasi dengan 5 test vector (bagian 2) tetap dijalankan sebagai unit
+  test di pipeline — meskipun sudah dockerize.
+
+--------------------------------------------------------------------------------
+16.5 Kaitkan dengan fitur lama (bagian 12)
+--------------------------------------------------------------------------------
+
+- Backup otomatis (bagian 12): di versi dockerized, data ada di volume
+  Postgres. Implementasikan backup sebagai:
+    - pg_dump terjadwal (container sidecar / cron) ke lokasi persist (volume
+      backup terpisah atau host mount), ATAU
+    - tetap pertahankan fitur Export/Import database di aplikasi (backend
+      melakukan dump/restore via koneksi DB) sehingga user non-teknis tidak
+      butuh akses terminal Docker.
+- Folder backup aplikasi (mis. /app/backups) HARUS di volume atau host mount
+  agar tidak hilang saat container di-recreate.
+- Fitur Import DB (bagian 12): validasi struktur tetap berlaku (cek tabel
+  inti ada sebelum restore), backup dulu, baru ganti data.
+
+--------------------------------------------------------------------------------
+16.6 Verifikasi akhir dockerized
+--------------------------------------------------------------------------------
+
+- docker compose up --build tanpa error; app bisa dibuka di browser.
+- Restart container app -> data TETAP ADA (ada di volume).
+- docker compose down + up -> data TETAP ADA (volume survive).
+- Tanpa internet / hanya image yang sudah di-pull -> masih bisa start
+  (semua image di-pull sekali di awal).
+- Seluruh checklist QA (bagian 14) tetap LULUS di lingkungan container.
+- Log container tidak mengandung secret/password.
+
+================================================================================
+                           END OF SPESIFIKASI
+================================================================================

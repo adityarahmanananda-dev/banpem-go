@@ -1,0 +1,20 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Detail Entri BKU</h4>
+  <a href="/bantuan/{{.Bantuan.ID}}/bku" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kembali</a>
+</div>
+<div class="card">
+  <div class="card-body">
+    <dl class="row mb-0">
+      <dt class="col-sm-3">Nomor</dt><dd class="col-sm-9">{{.E.Nomor}}</dd>
+      <dt class="col-sm-3">Tanggal</dt><dd class="col-sm-9">{{if .E.Tanggal}}{{dateID .E.Tanggal}}{{else}}-{{end}}</dd>
+      <dt class="col-sm-3">No. Bukti</dt><dd class="col-sm-9 text-break">{{.E.NomorBukti}}</dd>
+      <dt class="col-sm-3">Uraian</dt><dd class="col-sm-9">{{.E.Uraian}}</dd>
+      <dt class="col-sm-3">Debit</dt><dd class="col-sm-9">{{fmtMoney .E.Debit}}</dd>
+      <dt class="col-sm-3">Kredit</dt><dd class="col-sm-9">{{fmtMoney .E.Kredit}}</dd>
+      <dt class="col-sm-3">Saldo</dt><dd class="col-sm-9">{{fmtMoney .E.Saldo}}</dd>
+      <dt class="col-sm-3">Jenis Transaksi</dt><dd class="col-sm-9">{{.E.JenisTransaksi}}</dd>
+    </dl>
+  </div>
+</div>
+{{end}}

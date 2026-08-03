@@ -1,0 +1,110 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-diagram-3"></i> Data Kegiatan</h4>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header fw-bold">Tambah Kegiatan</div>
+  <div class="card-body">
+    <form method="post" action="/bantuan/{{.Bantuan.ID}}/kegiatan/tambah" class="d-flex gap-2">
+      <input type="text" class="form-control" name="nama" placeholder="Nama kegiatan" required>
+      <button class="btn btn-primary text-nowrap"><i class="bi bi-plus-lg"></i> Tambah</button>
+    </form>
+  </div>
+</div>
+
+{{range $i, $k := .Tree}}
+<div class="card mb-3">
+  <div class="card-header d-flex justify-content-between align-items-center {{kegColor $i}}">
+    <div>
+      <b>{{.Nama}}</b>
+      <span class="badge bg-light text-dark ms-2">Sub Total: {{fmtMoney .Pagu}}</span>
+    </div>
+    <form method="post" action="/bantuan/{{$.Bantuan.ID}}/kegiatan/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus kegiatan beserta sub kegiatan & komponennya?');">
+      <button class="btn btn-outline-light btn-sm"><i class="bi bi-trash"></i></button>
+    </form>
+  </div>
+  <div class="card-body">
+    <form method="post" action="/bantuan/{{$.Bantuan.ID}}/sub-kegiatan/tambah" class="d-flex gap-2 mb-3">
+      <input type="hidden" name="kegiatan_id" value="{{.ID}}">
+      <input type="text" class="form-control" name="nama" placeholder="Nama sub kegiatan" required>
+      <button class="btn btn-outline-primary btn-sm text-nowrap"><i class="bi bi-plus-lg"></i> Sub Kegiatan</button>
+    </form>
+    {{range $j, $s := .Subs}}
+    <div class="border rounded p-2 mb-2 {{subColor $j}}">
+      <div class="d-flex justify-content-between align-items-center">
+        <b class="ms-1">{{.Nama}} <span class="badge bg-white text-dark ms-1">Sub Total: {{fmtMoney .Pagu}}</span></b>
+        <form method="post" action="/bantuan/{{$.Bantuan.ID}}/sub-kegiatan/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus sub kegiatan beserta komponennya?');">
+          <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+        </form>
+      </div>
+      <div class="table-responsive mt-2">
+        <table class="table table-sm table-bordered table-hover bg-white align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Komponen</th>
+              <th class="text-end" style="width:200px">Pagu Anggaran (Rp)</th>
+              <th class="text-end" style="width:140px">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range .Komponens}}
+            <tr>
+              <td>{{.Nama}}</td>
+              <td class="text-end">{{fmtMoney .Pagu}}</td>
+              <td class="text-end text-nowrap">
+                <a href="/bantuan/{{$.Bantuan.ID}}/komponen/edit/{{.ID}}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i></a>
+                <form method="post" action="/bantuan/{{$.Bantuan.ID}}/komponen/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus komponen ini?');">
+                  <button class="btn btn-outline-danger btn-sm"><i class="bi bi-x"></i></button>
+                </form>
+              </td>
+            </tr>
+            {{else}}
+            <tr><td colspan="3" class="text-center text-muted">Belum ada komponen.</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      <form method="post" action="/bantuan/{{$.Bantuan.ID}}/komponen/tambah" class="row g-2 mt-2">
+        <input type="hidden" name="sub_kegiatan_id" value="{{.ID}}">
+        <div class="col-12 col-md-6">
+          <input type="text" class="form-control form-control-sm" name="nama" placeholder="Nama komponen" required>
+        </div>
+        <div class="col-8 col-md-4">
+          <input type="text" class="form-control form-control-sm money-input" name="pagu" placeholder="Pagu (Rp)">
+        </div>
+        <div class="col-4 col-md-2 d-grid">
+          <button class="btn btn-outline-primary btn-sm text-nowrap"><i class="bi bi-plus-lg"></i> Komponen</button>
+        </div>
+      </form>
+    </div>
+    {{else}}
+    <p class="text-muted small mb-0">Belum ada sub kegiatan.</p>
+    {{end}}
+  </div>
+</div>
+{{else}}
+<div class="alert alert-info">Belum ada data kegiatan. Silakan tambah kegiatan terlebih dahulu.</div>
+{{end}}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row text-center">
+      <div class="col-md-4">
+        <div class="text-muted small">Total Anggaran Kegiatan</div>
+        <div class="fs-5 fw-bold">{{fmtMoney .TotalPagu}}</div>
+      </div>
+      <div class="col-md-4">
+        <div class="text-muted small">Nilai Hibah</div>
+        <div class="fs-5 fw-bold">{{if .Bantuan.Nominal}}{{fmtMoney .Bantuan.Nominal}}{{else}}-{{end}}</div>
+      </div>
+      <div class="col-md-4">
+        <div class="text-muted small">Selisih</div>
+        <div class="fs-5 fw-bold {{if and .Bantuan.Nominal (gt .TotalPagu (int64p .Bantuan.Nominal))}}text-danger{{else}}text-success{{end}}">
+          {{if .Bantuan.Nominal}}{{fmtMoney (sub .TotalPagu (int64p .Bantuan.Nominal))}}{{else}}-{{end}}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{{end}}

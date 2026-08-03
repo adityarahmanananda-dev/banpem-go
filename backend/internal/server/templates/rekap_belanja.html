@@ -1,0 +1,55 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-list-check"></i> Rekap Belanja</h4>
+  <div class="d-flex flex-wrap gap-1">
+    <div class="dropdown">
+      <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Export</button>
+      <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/rekap-belanja/export-pdf">PDF</a></li>
+        <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/rekap-belanja/export-word">Word</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Bruto</div><div class="fs-5 fw-bold">{{fmtMoney .TotBruto}}</div></div></div></div>
+  <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Pajak</div><div class="fs-5 fw-bold">{{fmtMoney .TotPPN}}</div></div></div></div>
+  <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Biaya Admin</div><div class="fs-5 fw-bold">{{fmtMoney .TotBiayaAdmin}}</div></div></div></div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>No</th><th>Kegiatan</th><th>Sub Kegiatan</th><th>Uraian Tagihan</th><th>Penyedia / Bank / No.Rek / NPWP</th>
+          <th class="text-end">Bruto</th><th class="text-end">PPN</th><th class="text-end">PPh</th><th class="text-end">Biaya Admin</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $i, $r := .Rows}}
+        <tr>
+          <td>{{inc $i}}</td>
+          <td style="white-space:pre-line">{{$r.Kegiatan}}</td>
+          <td style="white-space:pre-line">{{$r.SubKeg}}</td>
+          <td>{{$r.Uraian}}</td>
+          <td class="small" style="white-space:pre-line">{{$r.Penyedia}}
+{{$r.Bank}} - {{$r.NoRek}}
+NPWP: {{formatNPWP $r.NPWP}}</td>
+          <td class="text-end">{{fmtMoney $r.Bruto}}</td>
+          <td class="text-end">{{fmtMoney $r.PPN}}</td>
+          <td class="text-end">{{fmtMoney $r.PPH}}</td>
+          <td class="text-end">{{fmtMoney $r.BiayaAdmin}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="9" class="text-center text-muted">Belum ada tagihan.</td></tr>
+        {{end}}
+      </tbody>
+      <tfoot class="table-light fw-bold">
+        <tr><td colspan="5" class="text-end">TOTAL</td><td class="text-end">{{fmtMoney .TotBruto}}</td><td class="text-end">{{fmtMoney .TotPPN}}</td><td class="text-end">{{fmtMoney .TotPPh}}</td><td class="text-end">{{fmtMoney .TotBiayaAdmin}}</td></tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{{end}}

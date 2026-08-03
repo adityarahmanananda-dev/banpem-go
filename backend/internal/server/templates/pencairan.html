@@ -1,0 +1,52 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-arrow-down-circle"></i> Pencairan</h4>
+  <a href="/bantuan/{{.Bantuan.ID}}/pencairan/tambah" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Tambah Tahap</a>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card text-center"><div class="card-body"><div class="text-muted small">Total Turun</div><div class="fs-5 fw-bold">{{fmtMoney .Total}}</div></div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card text-center"><div class="card-body"><div class="text-muted small">Sisa</div><div class="fs-5 fw-bold">{{fmtMoney (sub .Nominal .Total)}}</div></div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card text-center"><div class="card-body"><div class="text-muted small">Jumlah Tahap</div><div class="fs-5 fw-bold">{{len .Pencairan}}</div></div></div>
+  </div>
+</div>
+
+{{if .Nominal}}
+<div class="progress mb-3" style="height:24px">
+  <div class="progress-bar bg-primary" style="width: {{.Persen}}%">{{.Persen}}%</div>
+</div>
+{{end}}
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover">
+      <thead class="table-light">
+        <tr><th>Tahap</th><th>Tanggal</th><th>Keterangan</th><th class="text-end">Nominal</th><th class="text-end">Aksi</th></tr>
+      </thead>
+      <tbody>
+        {{range .Pencairan}}
+        <tr>
+          <td>Tahap {{.Tahap}}</td>
+          <td>{{if .Tanggal}}{{dateID .Tanggal}}{{end}}</td>
+          <td>{{.Keterangan}}</td>
+          <td class="text-end">{{fmtMoney .Nominal}}</td>
+          <td class="text-end">
+            <a class="btn btn-outline-secondary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/pencairan/edit/{{.ID}}"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="/bantuan/{{$.Bantuan.ID}}/pencairan/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus pencairan ini?');">
+              <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="text-center text-muted">Belum ada pencairan.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}

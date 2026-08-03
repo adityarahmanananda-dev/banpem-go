@@ -1,0 +1,21 @@
+# Environment & secrets
+.env
+.env.local
+
+# Database & backup
+*.db
+*.sqlite
+*.sqlite3
+backups/
+*.log
+
+# Build artifacts
+bin/
+dist/
+*.exe
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

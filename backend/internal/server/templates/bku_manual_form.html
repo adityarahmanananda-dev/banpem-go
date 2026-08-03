@@ -1,0 +1,43 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">{{if .E.ID}}Edit Entri Manual{{else}}Input Entri Manual{{end}}</h4>
+  <a href="/bantuan/{{.Bantuan.ID}}/bku" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kembali</a>
+</div>
+
+<form method="post" class="card">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Tanggal</label>
+        <input type="date" class="form-control" name="tanggal" required value="{{if .E.Tanggal}}{{.E.Tanggal.Format "2006-01-02"}}{{else}}{{.Bantuan.CreatedAt.Format "2006-01-02"}}{{end}}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">No. Bukti</label>
+        <input type="text" class="form-control" name="nomor_bukti" value="{{.E.NomorBukti}}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Jenis Transaksi</label>
+        <select class="form-select" name="jenis_transaksi" {{if .E.ID}}disabled{{end}}>
+          <option value="manual">manual</option>
+        </select>
+        {{if .E.ID}}<input type="hidden" name="jenis_transaksi" value="manual">{{end}}
+      </div>
+      <div class="col-12">
+        <label class="form-label">Uraian</label>
+        <input type="text" class="form-control" name="uraian" value="{{.E.Uraian}}" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Debit (Rp) — uang keluar</label>
+        <input type="text" class="form-control money-input" name="debit" value="{{if .E.Debit}}{{fmtMoneyNoRp .E.Debit}}{{end}}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Kredit (Rp) — uang masuk</label>
+        <input type="text" class="form-control money-input" name="kredit" value="{{if .E.Kredit}}{{fmtMoneyNoRp .E.Kredit}}{{end}}">
+      </div>
+    </div>
+  </div>
+  <div class="card-footer">
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Simpan</button>
+  </div>
+</form>
+{{end}}

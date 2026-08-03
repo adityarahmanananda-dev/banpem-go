@@ -1,0 +1,166 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">{{if .IsEdit}}Edit Tagihan{{else}}Input Tagihan{{end}}</h4>
+  <a href="/bantuan/{{.Bantuan.ID}}/tagihan" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kembali</a>
+</div>
+
+<script>window.MASTER = {{jsonDump .Kegiatans}}; window.BANTUAN_ID = {{.Bantuan.ID}}; window.BANK_BANTUAN = {{jsonDump .Bantuan.Bank}};</script>
+
+<form method="post" action="/bantuan/{{.Bantuan.ID}}/tagihan{{if .IsEdit}}/edit/{{.Inv.ID}}{{end}}" class="card">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">Tanggal</label>
+        <input type="date" class="form-control" name="tanggal" required value="{{if .Inv}}{{.Inv.Tanggal.Format "2006-01-02"}}{{end}}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">No. Bukti</label>
+        <input type="text" class="form-control" name="nomor_bukti" value="{{if .Inv}}{{.Inv.NomorBukti}}{{end}}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Jenis Pengeluaran</label>
+        <select class="form-select" name="jenis_menu" id="jenisMenu">
+          <option value="1" {{if and .Inv (eq .Inv.JenisMenu 1)}}selected{{end}}>Barang/Jasa</option>
+          <option value="2" {{if and .Inv (eq .Inv.JenisMenu 2)}}selected{{end}}>Honor Narasumber</option>
+          <option value="3" {{if and .Inv (eq .Inv.JenisMenu 3)}}selected{{end}}>Honor Peserta</option>
+          <option value="4" {{if and .Inv (eq .Inv.JenisMenu 4)}}selected{{end}}>Transport Narasumber</option>
+          <option value="5" {{if and .Inv (eq .Inv.JenisMenu 5)}}selected{{end}}>Uang Harian Narasumber</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Bruto (Rp)</label>
+        <input type="text" class="form-control money-input" name="bruto_utama" id="bruto" value="{{if .Inv}}{{fmtMoneyNoRp .Inv.Bruto}}{{end}}">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Uraian</label>
+        <input type="text" class="form-control" name="uraian" value="{{if .Inv}}{{.Inv.Uraian}}{{end}}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Nama Rekening</label>
+        <input type="text" class="form-control" name="nama_rekening" value="{{if .Inv}}{{.Inv.NamaRekening}}{{end}}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Bank</label>
+        <input type="text" class="form-control" name="bank" id="bank" value="{{if .Inv}}{{.Inv.Bank}}{{end}}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Nomor Rekening</label>
+        <input type="text" class="form-control" name="nomor_rekening" value="{{if .Inv}}{{.Inv.NomorRekening}}{{end}}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">NPWP</label>
+        <input type="text" class="form-control" name="npwp" value="{{if .Inv}}{{.Inv.NPWP}}{{end}}">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label d-block">Biaya Admin Dibebankan</label>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="biaya_admin_dibebankan" id="admTidak" value="tidak" {{if or (not .Inv) (eq .Inv.BiayaAdminDibebankan "tidak")}}checked{{end}}>
+          <label class="form-check-label" for="admTidak">Tidak</label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="radio" name="biaya_admin_dibebankan" id="admYa" value="ya" {{if .Inv}}{{if eq .Inv.BiayaAdminDibebankan "ya"}}checked{{end}}{{end}}>
+          <label class="form-check-label" for="admYa">Ya</label>
+        </div>
+      </div>
+
+      <div class="col-12" id="pajakMenu1">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">PPN Termasuk Bruto</label>
+            <select class="form-select flag-ppn" name="flag_ppn">
+              <option value="2" {{if or (not .Inv) (eq .Inv.FlagPpn 2)}}selected{{end}}>Tidak ada PPN</option>
+              <option value="1" {{if .Inv}}{{if eq .Inv.FlagPpn 1}}selected{{end}}{{end}}>Ya (PPN termasuk bruto)</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">PPh</label>
+            <select class="form-select flag-pph" name="flag_pph">
+              <option value="3" {{if or (not .Inv) (eq .Inv.FlagPph 3)}}selected{{end}}>Tidak ada PPh</option>
+              <option value="1" {{if .Inv}}{{if eq .Inv.FlagPph 1}}selected{{end}}{{end}}>PPh 22</option>
+              <option value="2" {{if .Inv}}{{if eq .Inv.FlagPph 2}}selected{{end}}{{end}}>PPh 23</option>
+            </select>
+          </div>
+          <div class="col-md-2" id="bupotPPN">
+            <label class="form-label">No. Bupot PPN</label>
+            <input type="text" class="form-control" name="nomor_bupot_ppn" value="{{if .Inv}}{{.Inv.NomorBupotPPN}}{{end}}">
+          </div>
+          <div class="col-md-2" id="bupotPPH">
+            <label class="form-label">No. Bupot PPh</label>
+            <input type="text" class="form-control" name="nomor_bupot_pph" value="{{if .Inv}}{{.Inv.NomorBupotPPH}}{{end}}">
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12" id="pajakMenu2">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">Kategori Narasumber</label>
+            <select class="form-select" name="kategori_narasumber">
+              <option value="">Pilih kategori</option>
+              <option value="1" {{if .Inv}}{{if eq (intp .Inv.KategoriNarasumber) 1}}selected{{end}}{{end}}>Gol I/II</option>
+              <option value="2" {{if .Inv}}{{if eq (intp .Inv.KategoriNarasumber) 2}}selected{{end}}{{end}}>Gol III</option>
+              <option value="3" {{if .Inv}}{{if eq (intp .Inv.KategoriNarasumber) 3}}selected{{end}}{{end}}>Gol IV</option>
+              <option value="4" {{if .Inv}}{{if eq (intp .Inv.KategoriNarasumber) 4}}selected{{end}}{{end}}>Non PNS</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">No. Bupot PPh</label>
+            <input type="text" class="form-control" name="nomor_bupot_pph" value="{{if .Inv}}{{.Inv.NomorBupotPPH}}{{end}}">
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12" id="pajakMenu3">
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">No. Bupot PPh</label>
+            <input type="text" class="form-control" name="nomor_bupot_pph" value="{{if .Inv}}{{.Inv.NomorBupotPPH}}{{end}}">
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <h6 class="text-primary"><i class="bi bi-calculator"></i> Preview Perhitungan Pajak</h6>
+        <div class="row g-1 small" id="taxPreview">
+          <div class="col-6 col-md-2">DPP: <b id="pvDpp">-</b></div>
+          <div class="col-6 col-md-3">DPP Nilai Lain: <b id="pvDppNilai">-</b></div>
+          <div class="col-6 col-md-2">PPN: <b id="pvPpn">-</b></div>
+          <div class="col-6 col-md-3">Jenis PPh: <b id="pvJenisPph">-</b></div>
+          <div class="col-6 col-md-2">PPh: <b id="pvPph">-</b></div>
+          <div class="col-6 col-md-2">Biaya Admin: <b id="pvAdmin">-</b></div>
+          <div class="col-6 col-md-3">Netto: <b id="pvNetto">-</b></div>
+        </div>
+      </div>
+
+      <div class="col-12">
+        <h6 class="text-primary"><i class="bi bi-diagram-3"></i> Realisasi Kegiatan</h6>
+        <div id="realisasiRows">
+          {{range .Realisasi}}
+          <div class="realisasi-row row g-2 mb-2">
+            <div class="col-12 col-md-3">
+              <select class="form-select form-select-sm r-kegiatan"></select>
+            </div>
+            <div class="col-12 col-md-3">
+              <select class="form-select form-select-sm r-sub" data-sub="{{.SubKegiatanID}}"></select>
+            </div>
+            <div class="col-12 col-md-3">
+              <select class="form-select form-select-sm r-komponen" name="komponen_id" data-komponen="{{.KomponenID}}"></select>
+            </div>
+            <div class="col-6 col-md-2">
+              <input type="text" class="form-control form-control-sm money-input r-bruto" name="bruto" value="{{if .Bruto}}{{fmtMoneyNoRp .Bruto}}{{end}}">
+            </div>
+            <div class="col-6 col-md-1 d-flex align-items-center">
+              <button type="button" class="btn btn-outline-danger btn-sm r-hapus"><i class="bi bi-x-lg"></i></button>
+            </div>
+          </div>
+          {{end}}
+        </div>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="tambahRealisasi"><i class="bi bi-plus-lg"></i> Tambah Baris</button>
+      </div>
+    </div>
+  </div>
+  <div class="card-footer">
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Simpan Tagihan</button>
+  </div>
+</form>
+{{end}}

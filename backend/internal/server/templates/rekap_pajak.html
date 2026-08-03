@@ -1,0 +1,117 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-pie-chart"></i> Rekap Pajak</h4>
+  <div class="d-flex flex-wrap gap-1">
+    <a href="/bantuan/{{.Bantuan.ID}}/bku/setor-pajak" class="btn btn-outline-warning btn-sm"><i class="bi bi-bank"></i> Setor Pajak</a>
+    <a href="/bantuan/{{.Bantuan.ID}}/jasa-giro/tambah?return=rekap" class="btn btn-outline-success btn-sm"><i class="bi bi-plus-lg"></i> Tambah Jasa Giro</a>
+    <div class="dropdown">
+      <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Export</button>
+      <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/laporan/rekap/excel">Excel</a></li>
+        <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/laporan/rekap/pdf">PDF</a></li>
+        <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/laporan/rekap/word">Word</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Pemungutan</div><div class="fs-5 fw-bold">{{fmtMoney .TotalPemungutan}}</div></div></div></div>
+  <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Penyetoran</div><div class="fs-5 fw-bold">{{fmtMoney .TotalPenyetoran}}</div></div></div></div>
+  <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Jasa Giro</div><div class="fs-5 fw-bold">{{fmtMoney .TotalJasaGiro}}</div></div></div></div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header fw-bold text-primary">1. PENERIMAAN PAJAK DARI TAGIHAN</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>No</th><th>Tanggal</th><th>NTB</th><th>NTPN</th><th>Uraian</th>
+          <th class="text-end">Bruto</th><th class="text-end">PPN</th><th class="text-end">PPh 21</th>
+          <th class="text-end">PPh 22</th><th class="text-end">PPh 23</th><th class="text-end">Total Pajak</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $i, $r := .Rows}}
+        <tr>
+          <td>{{inc $i}}</td>
+          <td>{{dateID $r.Tanggal}}</td>
+          <td class="text-break small" style="white-space:pre-line">{{$r.NTB}}</td>
+          <td class="text-break small" style="white-space:pre-line">{{$r.NTPN}}</td>
+          <td>{{$r.Uraian}}</td>
+          <td class="text-end">{{fmtMoney $r.Bruto}}</td>
+          <td class="text-end">{{fmtMoney $r.PPN}}</td>
+          <td class="text-end">{{fmtMoney $r.PPh21}}</td>
+          <td class="text-end">{{fmtMoney $r.PPh22}}</td>
+          <td class="text-end">{{fmtMoney $r.PPh23}}</td>
+          <td class="text-end">{{fmtMoney $r.Total}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="11" class="text-center text-muted">Belum ada tagihan.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header fw-bold text-warning">2. PENYETORAN PAJAK</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle">
+      <thead class="table-light">
+        <tr><th>No</th><th>Tanggal</th><th>No. Bukti</th><th>Uraian</th><th class="text-end">Nominal</th><th class="text-end">Aksi</th></tr>
+      </thead>
+      <tbody>
+        {{range $i, $e := .Setors}}
+        <tr>
+          <td>{{inc $i}}</td>
+          <td>{{if $e.Tanggal}}{{dateID $e.Tanggal}}{{end}}</td>
+          <td class="text-break">{{$e.NomorBukti}}</td>
+          <td>{{$e.Uraian}}</td>
+          <td class="text-end">{{fmtMoney $e.Debit}}</td>
+          <td class="text-end">
+            <a class="btn btn-outline-secondary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/bku/setor-pajak/detail/{{$e.ID}}"><i class="bi bi-eye"></i></a>
+            <a class="btn btn-outline-secondary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/bku/setor-pajak/edit/{{$e.ID}}"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="/bantuan/{{$.Bantuan.ID}}/bku/setor-pajak/hapus/{{$e.ID}}" class="d-inline" onsubmit="return confirm('Hapus penyetoran ini?');">
+              <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="6" class="text-center text-muted">Belum ada penyetoran.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header fw-bold text-success">3. JASA GIRO</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-hover">
+      <thead class="table-light">
+        <tr><th>No</th><th>Tanggal</th><th>Uraian</th><th class="text-end">Nominal</th><th class="text-end">Aksi</th></tr>
+      </thead>
+      <tbody>
+        {{range $i, $j := .JasaGiro}}
+        <tr>
+          <td>{{inc $i}}</td>
+          <td>{{if $j.Tanggal}}{{dateID $j.Tanggal}}{{end}}</td>
+          <td>{{$j.Uraian}}</td>
+          <td class="text-end">{{fmtMoney $j.Nominal}}</td>
+          <td class="text-end">
+            <form method="post" action="/bantuan/{{$.Bantuan.ID}}/jasa-giro/hapus/{{$j.ID}}?return=rekap" class="d-inline"
+              onsubmit="return confirm('Hapus jasa giro ini beserta entri BKU terkait?');">
+              <button class="btn btn-outline-danger btn-sm" title="Hapus"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="text-center text-muted">Belum ada jasa giro.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}

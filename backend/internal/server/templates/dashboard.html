@@ -1,0 +1,72 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Dashboard</h4>
+  <div>
+    <a href="/export-database" class="btn btn-outline-primary btn-sm"><i class="bi bi-box-arrow-down"></i> Export DB</a>
+    <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#importModal"><i class="bi bi-box-arrow-in-up"></i> Import DB</button>
+    <a href="/bantuan/tambah" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Tambah Bantuan</a>
+  </div>
+</div>
+
+{{if .Stats}}
+<div class="row g-3">
+  {{range .Stats}}
+  <div class="col-12 col-md-6 col-xl-4">
+    <div class="card h-100">
+      <div class="card-header bg-primary text-white fw-bold">
+        <i class="bi bi-building"></i> {{.Nama}}
+        {{if .NamaSekolah}}<div class="small fw-normal">{{.NamaSekolah}}</div>{{end}}
+      </div>
+      <div class="card-body small">
+        <div class="d-flex justify-content-between"><span class="text-muted">Saldo Berjalan</span><b>{{fmtMoney .SaldoBKU}}</b></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Saldo Bank</span><b>{{fmtMoney .SaldoBank}}</b></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Nominal</span><b>{{if .Nominal}}{{fmtMoney .Nominal}}{{else}}-{{end}}</b></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Dana Turun</span><b>{{fmtMoney .TotalTurun}}</b></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Bank / No. Rekening</span><b>{{.NamaRekening}} {{.NomorRekening}}</b></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Jumlah Tagihan</span><b>{{.InvoiceCount}}</b></div>
+      </div>
+      <div class="card-footer">
+        <div class="row g-1">
+          <div class="col-6 d-flex flex-column gap-1">
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/bku">BKU</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/bank">Bank</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/tagihan">Input Tagihan</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/rekap-pajak">Rekap Pajak</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/rekap-belanja">Rekap Belanja</a>
+          </div>
+          <div class="col-6 d-flex flex-column gap-1">
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/kegiatan">Data Kegiatan</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/jasa-giro">Jasa Giro</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/pencairan">Pencairan</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/saldo-awal">Set Saldo Awal</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/edit">Edit Bantuan</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {{end}}
+</div>
+{{else}}
+<div class="alert alert-info">Belum ada bantuan. Klik <b>Tambah Bantuan</b> untuk memulai.</div>
+{{end}}
+
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form method="post" action="/import-database" enctype="multipart/form-data" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Import Database</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">Unggah file backup <code>.db</code>. Database saat ini akan di-backup otomatis sebelum diganti.</p>
+        <input type="file" class="form-control" name="file" accept=".db">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="submit" class="btn btn-warning"><i class="bi bi-upload"></i> Import</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

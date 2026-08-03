@@ -1,0 +1,23 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Edit Komponen</h4>
+  <a href="/bantuan/{{.Bantuan.ID}}/kegiatan" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kembali</a>
+</div>
+<form method="post" class="card">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label">Nama Komponen</label>
+        <input type="text" class="form-control" name="nama" value="{{.K.Nama}}" required>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Pagu Anggaran (Rp)</label>
+        <input type="text" class="form-control money-input" name="pagu" value="{{if .K.Pagu}}{{fmtMoneyNoRp .K.Pagu}}{{end}}">
+      </div>
+    </div>
+  </div>
+  <div class="card-footer">
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Simpan</button>
+  </div>
+</form>
+{{end}}

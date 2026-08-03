@@ -1,0 +1,52 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Daftar Tagihan</h4>
+  <div>
+    <a href="/bantuan/{{.Bantuan.ID}}/tagihan/daftar" class="btn btn-outline-secondary btn-sm"><i class="bi bi-list-ul"></i> Daftar Tagihan</a>
+    <a href="/bantuan/{{.Bantuan.ID}}/tagihan/tambah" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Input Tagihan</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover table-sm align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>No</th>
+          <th>Tanggal</th>
+          <th>No. Bukti</th>
+          <th>Uraian</th>
+          <th class="text-end">Bruto</th>
+          <th class="text-end">Netto</th>
+          <th>Jenis</th>
+          <th class="text-end">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $i, $inv := .Invoices}}
+        <tr>
+          <td>{{inc $i}}</td>
+          <td>{{dateID $inv.Tanggal}}</td>
+          <td>{{$inv.NomorBukti}}</td>
+          <td>{{$inv.Uraian}}</td>
+          <td class="text-end">{{fmtMoney $inv.Bruto}}</td>
+          <td class="text-end">{{fmtMoney $inv.NilaiNetto}}</td>
+          <td>
+            {{if eq $inv.JenisMenu 1}}Barang/Jasa{{else if eq $inv.JenisMenu 2}}Honor Narasumber{{else if eq $inv.JenisMenu 3}}Honor Peserta{{else if eq $inv.JenisMenu 4}}Transport{{else}}Uang Harian{{end}}
+          </td>
+          <td class="text-end">
+            <a class="btn btn-outline-primary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/tagihan/detail/{{$inv.ID}}" title="Detail"><i class="bi bi-eye"></i></a>
+            <a class="btn btn-outline-secondary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/tagihan/edit/{{$inv.ID}}" title="Edit"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="/bantuan/{{$.Bantuan.ID}}/tagihan/hapus/{{$inv.ID}}" class="d-inline" onsubmit="return confirm('Hapus tagihan ini? Entri BKU dan Bank terkait ikut dihapus.');">
+              <button class="btn btn-outline-danger btn-sm" title="Hapus"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="8" class="text-center text-muted">Belum ada tagihan.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}

@@ -1,0 +1,105 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">Detail Tagihan</h4>
+  <div class="d-flex flex-wrap gap-1">
+    <a href="/bantuan/{{.Bantuan.ID}}/tagihan/edit/{{.Inv.ID}}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit</a>
+    <a href="/bantuan/{{.Bantuan.ID}}/tagihan" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kembali</a>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <dl class="row mb-0">
+      <dt class="col-sm-3">Tanggal</dt><dd class="col-sm-9">{{dateID .Inv.Tanggal}}</dd>
+      <dt class="col-sm-3">No. Bukti</dt><dd class="col-sm-9">{{.Inv.NomorBukti}}</dd>
+      <dt class="col-sm-3">Uraian</dt><dd class="col-sm-9">{{.Inv.Uraian}}</dd>
+      <dt class="col-sm-3">Jenis</dt><dd class="col-sm-9">{{jenisMenuLabel .Inv.JenisMenu}}</dd>
+      <dt class="col-sm-3">Nama Rekening</dt><dd class="col-sm-9">{{.Inv.NamaRekening}}</dd>
+      <dt class="col-sm-3">Bank</dt><dd class="col-sm-9">{{.Inv.Bank}}</dd>
+      <dt class="col-sm-3">No. Rekening</dt><dd class="col-sm-9">{{.Inv.NomorRekening}}</dd>
+      <dt class="col-sm-3">NPWP</dt><dd class="col-sm-9">{{formatNPWP .Inv.NPWP}}</dd>
+      <dt class="col-sm-3">No. Bupot PPN / PPh</dt><dd class="col-sm-9">{{.Inv.NomorBupotPPN}} / {{.Inv.NomorBupotPPH}}</dd>
+    </dl>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-md-3"><div class="card text-center"><div class="card-body"><div class="text-muted small">Bruto</div><div class="fs-5 fw-bold">{{fmtMoney .Inv.Bruto}}</div></div></div></div>
+  <div class="col-md-3"><div class="card text-center"><div class="card-body"><div class="text-muted small">PPN</div><div class="fs-5 fw-bold">{{fmtMoney .Inv.NilaiPPN}}</div></div></div></div>
+  <div class="col-md-3"><div class="card text-center"><div class="card-body"><div class="text-muted small">PPh</div><div class="fs-5 fw-bold">{{fmtMoney .Inv.NilaiPPH}}</div></div></div></div>
+  <div class="col-md-3"><div class="card text-center"><div class="card-body"><div class="text-muted small">Netto</div><div class="fs-5 fw-bold">{{fmtMoney .Inv.NilaiNetto}}</div></div></div></div>
+</div>
+
+{{if .Realisasi}}
+<div class="card mb-3">
+  <div class="card-header fw-bold">Realisasi</div>
+  <div class="table-responsive">
+    <table class="table table-sm mb-0">
+      <thead class="table-light">
+        <tr><th>No</th><th>Kegiatan</th><th>Sub Kegiatan</th><th>Komponen</th><th class="text-end">Bruto</th></tr>
+      </thead>
+      <tbody>
+        {{range $i, $rl := .Realisasi}}
+        <tr>
+          <td>{{inc $i}}</td>
+          <td>{{$rl.Kegiatan}}</td>
+          <td>{{$rl.SubKegiatan}}</td>
+          <td>{{$rl.Komponen}}</td>
+          <td class="text-end">{{fmtMoney $rl.Bruto}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-bold">Entri BKU</div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr><th>No</th><th>No. Bukti</th><th>Uraian</th><th class="text-end">Debit</th><th class="text-end">Kredit</th></tr>
+          </thead>
+          <tbody>
+            {{range .BKU}}
+            <tr>
+              <td>{{.Nomor}}</td><td>{{.NomorBukti}}</td><td>{{.Uraian}}</td>
+              <td class="text-end">{{if .Debit}}{{fmtMoney .Debit}}{{end}}</td>
+              <td class="text-end">{{if .Kredit}}{{fmtMoney .Kredit}}{{end}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="5" class="text-center text-muted">Tidak ada entri BKU.</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-bold">Entri Bank</div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead class="table-light">
+            <tr><th>No</th><th>No. Bukti</th><th>Uraian</th><th class="text-end">Debit</th><th class="text-end">Kredit</th></tr>
+          </thead>
+          <tbody>
+            {{range .Bank}}
+            <tr>
+              <td>{{.Nomor}}</td><td>{{.NomorBukti}}</td><td>{{.Uraian}}</td>
+              <td class="text-end">{{if .Debit}}{{fmtMoney .Debit}}{{end}}</td>
+              <td class="text-end">{{if .Kredit}}{{fmtMoney .Kredit}}{{end}}</td>
+            </tr>
+            {{else}}
+            <tr><td colspan="5" class="text-center text-muted">Tidak ada entri bank.</td></tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{{end}}

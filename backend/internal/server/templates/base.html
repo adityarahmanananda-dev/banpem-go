@@ -1,0 +1,119 @@
+{{define "base"}}
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} - e-BKU</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <link href="/static/app.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="/"><i class="bi bi-calculator"></i> e-BKU</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav me-auto">
+        <li class="nav-item"><a class="nav-link {{if eq .Active "dashboard"}}active{{end}}" href="/"><i class="bi bi-speedometer2"></i> Dashboard</a></li>
+        {{if .Bantuan}}
+        <li class="nav-item"><a class="nav-link {{if eq .Active "bantuan"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/edit"><i class="bi bi-pencil-square"></i> Edit Bantuan</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "saldo"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/saldo-awal"><i class="bi bi-cash-stack"></i> Saldo Awal</a></li>
+        {{end}}
+      </ul>
+    </div>
+  </div>
+</nav>
+
+{{if .FlashMsg}}
+<div class="container mt-3">
+  <div class="alert alert-{{.FlashType}} alert-dismissible fade show" role="alert">
+    {{.FlashMsg}}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+</div>
+{{end}}
+
+<div class="container-fluid">
+  <div class="row">
+    {{if .Bantuan}}
+    <div class="col-12 col-lg-2 border-end bg-light pt-3 sidebar">
+      <div class="fw-bold text-primary mb-2">{{.Bantuan.Nama}}</div>
+      <ul class="nav flex-column small">
+        <li class="nav-item"><a class="nav-link {{if eq .Active "bku"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/bku"><i class="bi bi-journal-text"></i> Buku Kas Umum</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "bank"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/bank"><i class="bi bi-bank"></i> Buku Kas Bank</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "tagihan"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/tagihan"><i class="bi bi-receipt"></i> Input Tagihan</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "rekap"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/rekap-pajak"><i class="bi bi-pie-chart"></i> Rekap Pajak</a></li>
+        <li class="nav-item"><a class="nav-link" href="/bantuan/{{.Bantuan.ID}}/rekap-belanja"><i class="bi bi-list-check"></i> Rekap Belanja</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "master"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/kegiatan"><i class="bi bi-diagram-3"></i> Data Kegiatan</a></li>
+        <li class="nav-item"><a class="nav-link" href="/bantuan/{{.Bantuan.ID}}/jasa-giro"><i class="bi bi-piggy-bank"></i> Jasa Giro</a></li>
+        <li class="nav-item"><a class="nav-link" href="/bantuan/{{.Bantuan.ID}}/pencairan"><i class="bi bi-arrow-down-circle"></i> Pencairan</a></li>
+      </ul>
+      {{if .Summary}}
+      <hr>
+      <div class="small text-muted">
+        <div>Saldo BKU: <b>{{fmtMoney .Summary.SaldoBKU}}</b></div>
+        <div>Dana Turun: <b>{{fmtMoney .Summary.TotalTurun}}</b></div>
+        <div>Tagihan: <b>{{.Summary.InvoiceCount}}</b></div>
+      </div>
+      {{end}}
+    </div>
+    <div class="col-12 col-lg-10 py-3">
+      {{template "content" .}}
+    </div>
+    {{else}}
+    <div class="col-12 py-3">
+      {{template "content" .}}
+    </div>
+    {{end}}
+  </div>
+</div>
+
+{{template "exportModal" .}}
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>
+{{end}}
+
+{{define "exportModal"}}
+<div class="modal fade" id="exportModal" tabindex="-1" aria-labelledby="exportModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form id="exportForm" method="get" class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="exportModalLabel">Export Laporan</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Tanggal Cetak</label>
+          <input type="date" class="form-control" name="tanggal_cetak" id="exportTanggalCetak">
+        </div>
+        <div class="mb-3" id="exportVersiWrap">
+          <label class="form-label">Versi</label>
+          <select class="form-select" name="versi" id="exportVersi">
+            <option value="rencana">Rencana 100%</option>
+            <option value="real">Real</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Orientasi (Word)</label>
+          <select class="form-select" name="orientasi" id="exportOrientasi">
+            <option value="landscape">Landscape</option>
+            <option value="portrait">Portrait</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+        <button type="submit" class="btn btn-primary"><i class="bi bi-download"></i> Export</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}

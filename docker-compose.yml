@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ebku
+      POSTGRES_PASSWORD: ebku
+      POSTGRES_DB: ebku
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ebku -d ebku"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgres://ebku:ebku@db:5432/ebku?sslmode=disable
+      BACKUP_DIR: /backups
+      ADDR: :8080
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - backups:/backups
+
+volumes:
+  pgdata:
+  backups:

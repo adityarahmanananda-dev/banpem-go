@@ -1,0 +1,76 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">{{if .IsEdit}}Edit Setor Pajak{{else}}Setor Pajak{{end}}</h4>
+  <a href="/bantuan/{{.Bantuan.ID}}/rekap-pajak" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kembali</a>
+</div>
+
+<form method="post" action="/bantuan/{{.Bantuan.ID}}/bku/setor-pajak{{if .IsEdit}}/edit/{{.SetorID}}{{end}}" class="card">
+  <div class="card-body">
+    <div class="row g-3 mb-3">
+      <div class="col-md-3">
+        <label class="form-label">Jenis Pajak</label>
+        <select class="form-select" name="jenis_pajak" id="jenisPajak">
+          {{range splitp "PPN|PPh 21|PPh 22|PPh 23" "|"}}
+          <option value="{{.}}" {{if eq $.Jenis .}}selected{{end}}>{{.}}</option>
+          {{end}}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Tanggal</label>
+        <input type="date" class="form-control" name="tanggal" value="{{.Tanggal}}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">NTB</label>
+        <input type="text" class="form-control" name="ntbn" value="{{.NTBN}}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">NTPN</label>
+        <input type="text" class="form-control" name="ntpn" value="{{.NTPN}}">
+      </div>
+      <div class="col-12">
+        <label class="form-label">Keterangan</label>
+        <input type="text" class="form-control" name="keterangan" value="{{.Keterangan}}" placeholder="Penyetoran {{.Jenis}}">
+      </div>
+    </div>
+
+    <h6 class="text-primary">Pilih Tagihan (nilai {{.Jenis}})</h6>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered align-middle">
+        <thead class="table-light">
+          <tr>
+            <th style="width:50px">Pilih</th>
+            <th>Tanggal</th>
+            <th>No. Bukti</th>
+            <th>Uraian</th>
+            <th class="text-end">Nilai {{.Jenis}}</th>
+            <th style="width:140px">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Invoices}}
+          <tr {{if .Paid}}class="table-secondary"{{end}}>
+            <td class="text-center">
+              <input type="checkbox" class="form-check-input setor-check" name="invoice_ids" value="{{.Invoice.ID}}" {{if .Checked}}checked{{end}} {{if .Paid}}disabled{{end}} data-nilai="{{.Value}}">
+            </td>
+            <td>{{dateID .Invoice.Tanggal}}</td>
+            <td>{{.Invoice.NomorBukti}}</td>
+            <td>{{.Invoice.Uraian}}</td>
+            <td class="text-end">{{fmtMoney .Value}}</td>
+            <td>{{if .Paid}}<span class="badge text-bg-secondary">sudah disetor</span>{{end}}</td>
+          </tr>
+          {{else}}
+          <tr><td colspan="6" class="text-center text-muted">Tidak ada tagihan dengan nilai {{.Jenis}}.</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    <div class="alert alert-light border small d-flex justify-content-between">
+      <span>Total Nominal</span>
+      <b id="setorTotal">Rp.0</b>
+    </div>
+  </div>
+  <div class="card-footer">
+    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Simpan Penyetoran</button>
+  </div>
+</form>
+{{end}}

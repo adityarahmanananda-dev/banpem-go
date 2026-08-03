@@ -1,0 +1,82 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-journal-text"></i> Buku Kas Umum</h4>
+  <div class="d-flex flex-wrap gap-1">
+    <a href="/bantuan/{{.Bantuan.ID}}/bku/tambah" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Input Manual</a>
+    <a href="/bantuan/{{.Bantuan.ID}}/bku/setor-pajak" class="btn btn-outline-warning btn-sm"><i class="bi bi-bank"></i> Setor Pajak</a>
+    <a href="/bantuan/{{.Bantuan.ID}}/tagihan/tambah" class="btn btn-outline-primary btn-sm"><i class="bi bi-receipt"></i> Input Tagihan</a>
+    <div class="dropdown">
+      <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Export</button>
+      <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/laporan/excel" data-versi="1">Excel</a></li>
+        <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/laporan/pdf" data-versi="1">PDF</a></li>
+        <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/laporan/word" data-versi="1">Word</a></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+{{if .Versi.ShowTabs}}
+<ul class="nav nav-pills mb-3">
+  <li class="nav-item"><a class="nav-link {{if eq .Versi.Versi "real"}}active{{end}}" href="?versi=real">Real (Dana Turun: {{fmtMoney .Versi.TotalTurun}})</a></li>
+  <li class="nav-item"><a class="nav-link {{if eq .Versi.Versi "rencana"}}active{{end}}" href="?versi=rencana">Rencana 100%</a></li>
+</ul>
+{{end}}
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover table-bordered align-middle">
+      <thead class="table-light">
+        <tr>
+          <th class="text-center" style="width:60px">No</th>
+          <th>Tanggal</th>
+          <th>No. Bukti</th>
+          <th>Uraian</th>
+          <th class="text-end">Debet (Rp)</th>
+          <th class="text-end">Kredit (Rp)</th>
+          <th class="text-end">Saldo (Rp)</th>
+          <th style="width:180px" class="text-end">Aksi</th>
+        </tr>
+      </thead>
+      <tbody id="ledgerTbody" data-bantuan="{{.Bantuan.ID}}" data-table="bku" data-url="/bantuan/{{.Bantuan.ID}}/bku/reorder">
+        {{range .Rows}}
+        <tr class="{{if eq .JenisTransaksi "pembayaran"}}table-primary{{else if eq .JenisTransaksi "setor_pajak"}}table-warning{{else if eq .JenisTransaksi "saldo_awal"}}table-info{{end}}{{if eq .JenisTransaksi "saldo_awal"}} no-drag{{end}}" data-id="{{.ID}}">
+          <td class="text-center">{{.Nomor}}</td>
+          <td>{{if .Tanggal}}{{dateID .Tanggal}}{{end}}</td>
+          <td class="text-break">{{.NomorBukti}}</td>
+          <td>
+            {{.Uraian}}
+            <span class="badge text-bg-secondary ms-1">{{.JenisTransaksi}}</span>
+          </td>
+          <td class="text-end">{{if .Debit}}{{fmtMoney .Debit}}{{else}}-{{end}}</td>
+          <td class="text-end">{{if .KreditDisp}}{{fmtMoney .KreditDisp}}{{else}}-{{end}}</td>
+          <td class="text-end">{{fmtMoney .SaldoDisp}}</td>
+          <td class="text-end">
+            {{if eq .JenisTransaksi "manual"}}
+            <a class="btn btn-outline-secondary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/bku/detail/{{.ID}}" title="Detail"><i class="bi bi-eye"></i></a>
+            <a class="btn btn-outline-secondary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/bku/edit/{{.ID}}" title="Edit"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="/bantuan/{{$.Bantuan.ID}}/bku/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus entri ini?');">
+              <button class="btn btn-outline-danger btn-sm" title="Hapus"><i class="bi bi-trash"></i></button>
+            </form>
+            {{else if eq .JenisTransaksi "setor_pajak"}}
+            <a class="btn btn-outline-warning btn-sm" href="/bantuan/{{$.Bantuan.ID}}/bku/setor-pajak/detail/{{.ID}}" title="Detail"><i class="bi bi-eye"></i></a>
+            {{else if .InvoiceID}}
+            <a class="btn btn-outline-primary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/tagihan/detail/{{.InvoiceID}}" title="Detail Tagihan"><i class="bi bi-receipt"></i></a>
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+      <tfoot class="table-light fw-bold">
+        <tr>
+          <td colspan="4" class="text-end">TOTAL</td>
+          <td class="text-end">{{fmtMoney .TotDebit}}</td>
+          <td class="text-end">{{fmtMoney .TotKredit}}</td>
+          <td></td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{{end}}
