@@ -20,6 +20,8 @@ type Col struct {
 	// Flex menandai kolom yang lebar-nya fleksibel: ketika total lebar kolom
 	// melebihi halaman, hanya kolom Flex yang dikurangi (kolom tetap tidak berubah).
 	Flex bool
+	// Center menandai kolom identitas (No, Tanggal) yang dirata-tengahkan.
+	Center bool
 	// Top menandai perataan vertikal atas (untuk Excel NTB/NTPN).
 	Top bool
 }
@@ -46,7 +48,10 @@ type Report struct {
 	// TotalMerge jumlah kolom awal pada baris TOTAL yang digabung menjadi satu
 	// cell label (mis. "TOTAL") yang dirapikan di tengah.
 	TotalMerge int
-	Sig        SigData
+	// Landscape true = A4 landscape (untuk laporan berkolom banyak seperti
+	// Rekap Pajak & Rekap Belanja); false = A4 portrait.
+	Landscape bool
+	Sig       SigData
 }
 
 // FmtAmount mengubah sen menjadi string laporan "1.000.000" (ribuan titik,

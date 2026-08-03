@@ -5,12 +5,13 @@ import "embed"
 //go:embed fonts/*
 var fontsFS embed.FS
 
-// pdfFont mengembalikan isi file font DejaVu yang diminta ("" untuk regular,
-// "B" untuk bold). nil bila font tidak tersedia.
+// pdfFont mengembalikan isi file font serif (Liberation Serif, setara Times
+// New Roman) yang diminta ("" untuk regular, "B" untuk bold). nil bila font
+// tidak tersedia.
 func pdfFont(style string) []byte {
-	name := "fonts/DejaVuSans.ttf"
+	name := "fonts/LiberationSerif.ttf"
 	if style == "B" {
-		name = "fonts/DejaVuSans-Bold.ttf"
+		name = "fonts/LiberationSerif-Bold.ttf"
 	}
 	b, err := fontsFS.ReadFile(name)
 	if err != nil {

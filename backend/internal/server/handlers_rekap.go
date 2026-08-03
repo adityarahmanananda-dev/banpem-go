@@ -43,7 +43,7 @@ func (s *Server) handleRekapPajak(w http.ResponseWriter, r *http.Request) {
 		TotalPenyetoran int64
 		TotalJasaGiro   int64
 	}{
-		baseView: baseView{Title: "Rekap Pajak", Active: "rekap", FlashType: ft, FlashMsg: fm,
+		baseView: baseView{Title: "Rekap Pajak", Active: "rekap-pajak", FlashType: ft, FlashMsg: fm,
 			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
 		Rows: rows, Setors: setors, JasaGiro: jasas,
 		TotalPemungutan: s.Store.TotalPemungutan(r.Context(), id),
@@ -85,7 +85,7 @@ func (s *Server) handleRekapBelanja(w http.ResponseWriter, r *http.Request) {
 		TotPPh        int64
 		TotBiayaAdmin int64
 	}{
-		baseView: baseView{Title: "Rekap Belanja", Active: "rekap", FlashType: ft, FlashMsg: fm,
+		baseView: baseView{Title: "Rekap Belanja", Active: "rekap-belanja", FlashType: ft, FlashMsg: fm,
 			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
 		Rows: rows, TotBruto: tBruto, TotPPN: tPPN, TotPPh: tPPh, TotBiayaAdmin: tAdmin,
 	}

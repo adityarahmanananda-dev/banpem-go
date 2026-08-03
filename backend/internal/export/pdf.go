@@ -3,35 +3,44 @@ package export
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/go-pdf/fpdf"
 )
 
+// Layout dokumen resmi: margin ~18-20 mm, monokrom, font serif. Orientasi
+// A4 portrait (default) atau landscape (untuk laporan berkolom banyak).
 const (
-	pdfW      = 297.0
-	pdfH      = 210.0
-	pdfLeft   = 10.0
-	pdfTop    = 15.0
-	pdfBot    = 15.0
-	pdfUsable = pdfW - pdfLeft - 10.0 // 277
+	pdfLeft   = 18.0
+	pdfRight  = 18.0
+	pdfTop    = 20.0
+	pdfBot    = 18.0
 
-	headerH  = 10.0
-	bodySize = 9.0
-	cellPadX = 1.5
-	cellPadY = 1.5
+	titleSize = 14.0
+	subSize   = 12.0
+	headSize  = 10.5
+	bodySize  = 10.0
+	footSize  = 11.0
+	minRowH   = 7.0  // ~20pt
+	cellPadX  = 1.8  // ~5pt
+	cellPadY  = 0.9  // ~2.5pt
 )
 
-func lineH(size float64) float64 { return size * 0.45 }
+func lineH(size float64) float64 { return size * 0.40 }
 
 type pdfRender struct {
-	p   *fpdf.Fpdf
-	utf bool
+	p      *fpdf.Fpdf
+	utf    bool
+	usable float64 // lebar area cetak
+	pageH  float64 // tinggi halaman
 }
 
-// PDF menghasilkan file .pdf A4 landscape dari model laporan.
+// PDF menghasilkan file .pdf A4 dari model laporan dengan gaya dokumen resmi:
+// monokrom, font serif, tanpa shading, border tipis, header tabel diulang tiap
+// halaman, footer tanda tangan hanya di halaman terakhir.
 func PDF(rep Report) ([]byte, error) {
-	r, err := newPDF()
+	r, err := newPDF(rep.Landscape)
 	if err != nil {
 		return nil, err
 	}
@@ -45,41 +54,35 @@ func PDF(rep Report) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func newPDF() (*pdfRender, error) {
-	p := fpdf.New("L", "mm", "A4", "")
-	p.SetMargins(pdfLeft, pdfTop, 10.0)
-	p.SetAutoPageBreak(true, pdfBot)
-	r := &pdfRender{p: p}
-	if err := r.addUTF8Fonts(); err == nil {
-		r.utf = true
+func newPDF(landscape bool) (*pdfRender, error) {
+	pageW, pageH, orient := 210.0, 297.0, "P"
+	if landscape {
+		pageW, pageH, orient = 297.0, 210.0, "L"
 	}
+	p := fpdf.New(orient, "mm", "A4", "")
+	p.SetMargins(pdfLeft, pdfTop, pdfRight)
+	p.SetAutoPageBreak(true, pdfBot)
+	r := &pdfRender{p: p, usable: pageW - pdfLeft - pdfRight, pageH: pageH}
+	if err := r.addFonts(); err != nil {
+		return nil, err
+	}
+	r.utf = true
 	return r, nil
 }
 
-func (r *pdfRender) addUTF8Fonts() error {
+func (r *pdfRender) addFonts() error {
 	reg := pdfFont("")
 	bold := pdfFont("B")
 	if reg == nil || bold == nil {
-		return fmt.Errorf("font dejavu tidak tersedia")
+		return fmt.Errorf("font serif tidak tersedia")
 	}
-	r.p.AddUTF8FontFromBytes("DejaVu", "", reg)
-	r.p.AddUTF8FontFromBytes("DejaVu", "B", bold)
+	r.p.AddUTF8FontFromBytes("Serif", "", reg)
+	r.p.AddUTF8FontFromBytes("Serif", "B", bold)
 	return nil
 }
 
 func (r *pdfRender) font(style string, size float64) {
-	if r.utf {
-		r.p.SetFont("DejaVu", style, size)
-	} else {
-		r.p.SetFont("Helvetica", style, size)
-	}
-}
-
-func (r *pdfRender) txt(s string) string {
-	if r.utf {
-		return s
-	}
-	return toCp1252(s)
+	r.p.SetFont("Serif", style, size)
 }
 
 func (r *pdfRender) render(rep Report) error {
@@ -87,18 +90,19 @@ func (r *pdfRender) render(rep Report) error {
 	p.AddPage()
 	p.SetTextColor(0, 0, 0)
 
-	r.font("B", 14)
-	p.CellFormat(0, 9, r.txt(strings.ToUpper(rep.Title)), "", 2, "C", false, 0, "")
-	r.font("B", 12)
-	p.CellFormat(0, 8, r.txt(rep.Subtitle), "", 2, "C", false, 0, "")
+	// Judul (hanya halaman pertama): baris 1 = judul (bold), baris 2 = nama hibah.
+	r.font("B", titleSize)
+	p.CellFormat(0, lineH(titleSize), strings.ToUpper(rep.Title), "", 2, "C", false, 0, "")
+	r.font("", subSize)
+	p.CellFormat(0, lineH(subSize), rep.Subtitle, "", 2, "C", false, 0, "")
 	p.Ln(3)
 
-	widths := scaleWidths(rep.Cols, pdfUsable)
+	widths := r.computeWidths(rep, r.usable)
 
 	r.drawHeader(widths, rep)
 	for _, row := range rep.Rows {
 		rh := r.rowHeight(row, rep.Cols, widths)
-		if p.GetY()+rh > pdfH-pdfBot {
+		if p.GetY()+rh > r.pageH-pdfBot {
 			p.AddPage()
 			r.drawHeader(widths, rep)
 		}
@@ -106,7 +110,7 @@ func (r *pdfRender) render(rep Report) error {
 	}
 	if rep.TotalRow != nil {
 		rh := r.rowHeight(rep.TotalRow, rep.Cols, widths)
-		if p.GetY()+rh > pdfH-pdfBot {
+		if p.GetY()+rh > r.pageH-pdfBot {
 			p.AddPage()
 			r.drawHeader(widths, rep)
 		}
@@ -116,33 +120,70 @@ func (r *pdfRender) render(rep Report) error {
 	return nil
 }
 
-func scaleWidths(cols []Col, usable float64) []float64 {
-	ws := make([]float64, len(cols))
+// computeWidths menghitung lebar kolom: kolom tetap (bukan Flex) diset cukup
+// lebar agar isinya (tanggal & nilai rupiah) muat SATU BARIS tanpa wrapping,
+// sedangkan sisa lebar halaman dibagikan ke kolom Flex (Uraian & No Bukti)
+// yang boleh membungkus.
+func (r *pdfRender) computeWidths(rep Report, usable float64) []float64 {
+	n := len(rep.Cols)
+	ws := make([]float64, n)
 	fixed := 0.0
-	flx := 0.0
-	for i, c := range cols {
-		ws[i] = c.Width
-		if c.Flex {
-			flx += c.Width
-		} else {
-			fixed += c.Width
+	for i, col := range rep.Cols {
+		ws[i] = col.Width // deklarasi sebagai minimum
+		r.font("B", headSize)
+		if w := r.p.GetStringWidth(col.Header) + 2*cellPadX; w > ws[i] {
+			ws[i] = w
 		}
-	}
-	total := fixed + flx
-	if total > usable {
-		over := total - usable
-		if flx > 0 && over <= flx {
-			f := (flx - over) / flx
-			for i, c := range cols {
-				if c.Flex {
-					ws[i] *= f
+		r.font("", bodySize)
+		for _, row := range rep.Rows {
+			if i < len(row) && row[i] != nil {
+				if w := r.p.GetStringWidth(r.cellText(row[i], col)) + 2*cellPadX; w > ws[i] {
+					ws[i] = w
 				}
 			}
-		} else {
-			f := usable / total
-			for i := range ws {
-				ws[i] *= f
+		}
+		if rep.TotalRow != nil && i < len(rep.TotalRow) && rep.TotalRow[i] != nil {
+			if w := r.p.GetStringWidth(r.cellText(rep.TotalRow[i], col)) + 2*cellPadX; w > ws[i] {
+				ws[i] = w
 			}
+		}
+		if !col.Flex {
+			fixed += ws[i]
+		}
+	}
+	flexDeclared := 0.0
+	for _, col := range rep.Cols {
+		if col.Flex {
+			flexDeclared += col.Width
+		}
+	}
+	remain := usable - fixed
+	if remain <= 0 {
+		// tetap butuh lebih; skala semua kolom proporsional.
+		total := fixed
+		for _, w := range ws {
+			total += w
+		}
+		f := usable / total
+		for i := range ws {
+			ws[i] *= f
+		}
+		return ws
+	}
+	if flexDeclared > 0 {
+		for i, col := range rep.Cols {
+			if col.Flex {
+				ws[i] = remain * (col.Width / flexDeclared)
+			}
+		}
+	} else {
+		total := 0.0
+		for _, w := range ws {
+			total += w
+		}
+		f := usable / total
+		for i := range ws {
+			ws[i] *= f
 		}
 	}
 	return ws
@@ -152,104 +193,169 @@ func (r *pdfRender) drawHeader(ws []float64, rep Report) {
 	p := r.p
 	y := p.GetY()
 	x := pdfLeft
-	p.SetFillColor(0x44, 0x72, 0xC4)
-	p.SetTextColor(255, 255, 255)
+	r.font("B", headSize)
+	lh := lineH(headSize)
+	maxLines := 1
 	for i, c := range rep.Cols {
 		usable := ws[i] - 2*cellPadX
-		lines, size := r.cellLines(c.Header, usable, 9, "B", true)
-		if len(lines) == 0 {
-			lines = [][]byte{[]byte("")}
+		lines := r.wrapText(c.Header, usable)
+		if len(lines) > maxLines {
+			maxLines = len(lines)
 		}
-		r.font("B", size)
-		lh := lineH(size)
-		p.Rect(x, y, ws[i], headerH, "DF")
-		ly := y + (headerH-lh*float64(len(lines)))/2
+	}
+	hh := float64(maxLines)*lh + 2*cellPadY
+	if hh < minRowH {
+		hh = minRowH
+	}
+	for i, c := range rep.Cols {
+		p.Rect(x, y, ws[i], hh, "D")
+		usable := ws[i] - 2*cellPadX
+		lines := r.wrapText(c.Header, usable)
+		if len(lines) == 0 {
+			lines = []string{""}
+		}
+		ly := y + (hh-lh*float64(len(lines)))/2
 		for _, ln := range lines {
 			p.SetXY(x+cellPadX, ly)
-			p.CellFormat(usable, lh, string(ln), "", 0, "C", false, 0, "")
+			p.CellFormat(usable, lh, ln, "", 0, "C", false, 0, "")
 			ly += lh
 		}
 		x += ws[i]
 	}
-	p.SetTextColor(0, 0, 0)
-	p.SetY(y + headerH)
+	p.SetY(y + hh)
 }
 
 func (r *pdfRender) cellAlign(col Col, i int) string {
 	switch {
 	case col.Num:
 		return "R"
-	case i == 0:
+	case col.Center || i == 0:
 		return "C"
 	default:
 		return "L"
 	}
 }
 
-// cellLines memecah teks menjadi baris-baris yang muat di usable. Jika wrap
-// true, teks boleh membungkus (No. Bukti, Uraian, NTB/NTPN). Jika false, teks
-// dipaksa satu baris dengan mengecilkan font (kolom tetap seperti tanggal,
-// debit, kredit, saldo). Mengembalikan baris dan ukuran font terpakai.
-func (r *pdfRender) cellLines(text string, usable, size float64, style string, wrap bool) ([][]byte, float64) {
-	r.font(style, size)
+// wrapText memecah teks menjadi baris-baris yang muat di usable: word wrapping
+// biasa + break-word untuk string panjang tanpa spasi. TIDAK mengecilkan font,
+// TIDAK ellipsis. Font aktif dipakai untuk pengukuran lebar.
+func (r *pdfRender) wrapText(text string, usable float64) []string {
 	if text == "" {
-		return nil, size
+		return nil
 	}
-	lines := r.p.SplitLines([]byte(r.txt(text)), usable)
-	if len(lines) > 1 && !strings.Contains(text, "\n") {
-		if !wrap {
-			for size > 5 && len(lines) > 1 {
-				size -= 0.25
-				r.font(style, size)
-				lines = r.p.SplitLines([]byte(r.txt(text)), usable)
+	if usable <= 1 {
+		// Kolom terlalu sempit: kembalikan per baris tanpa break-word.
+		return strings.Split(text, "\n")
+	}
+	var out []string
+	for _, para := range strings.Split(text, "\n") {
+		if strings.TrimSpace(para) == "" {
+			out = append(out, "")
+			continue
+		}
+		words := strings.Fields(para)
+		line := ""
+		for _, w := range words {
+			// Break kata panjang (tanpa spasi) per karakter.
+			for r.p.GetStringWidth(w) > usable {
+				cut := len(w)
+				for cut > 0 && r.p.GetStringWidth(w[:cut]) > usable {
+					cut--
+				}
+				if cut == 0 {
+					cut = 1
+				}
+				if line != "" {
+					out = append(out, line)
+					line = ""
+				}
+				out = append(out, w[:cut])
+				w = w[cut:]
 			}
-		} else {
-			for size > 6 && len(lines) > 5 {
-				size -= 0.25
-				r.font(style, size)
-				lines = r.p.SplitLines([]byte(r.txt(text)), usable)
+			test := w
+			if line != "" {
+				test = line + " " + w
+			}
+			if r.p.GetStringWidth(test) > usable && line != "" {
+				out = append(out, line)
+				line = w
+			} else {
+				line = test
 			}
 		}
+		out = append(out, line)
 	}
-	return lines, size
+	return out
+}
+
+// pdfAmount memformat sen menjadi "20,850,000" (komma ribu, tanpa desimal,
+// tanpa Rp). Nilai 0 ditampilkan kosong.
+func pdfAmount(c int64) string {
+	if c == 0 {
+		return ""
+	}
+	neg := c < 0
+	if neg {
+		c = -c
+	}
+	q, r := c/100, c%100
+	switch {
+	case r > 50:
+		q++
+	case r == 50:
+		if q&1 == 1 {
+			q++
+		}
+	}
+	s := thousandsComma(q)
+	if neg && q > 0 {
+		return "-" + s
+	}
+	return s
+}
+
+func thousandsComma(n int64) string {
+	s := strconv.FormatInt(n, 10)
+	var parts []string
+	for len(s) > 3 {
+		parts = append([]string{s[len(s)-3:]}, parts...)
+		s = s[:len(s)-3]
+	}
+	parts = append([]string{s}, parts...)
+	return strings.Join(parts, ",")
+}
+
+func (r *pdfRender) cellText(cell any, col Col) string {
+	if col.Num {
+		switch v := cell.(type) {
+		case int64:
+			return pdfAmount(v)
+		case int:
+			return pdfAmount(int64(v))
+		}
+	}
+	return CellText(cell)
 }
 
 func (r *pdfRender) rowHeight(row []any, cols []Col, ws []float64) float64 {
-	max := 0.0
+	max := minRowH
+	r.font("", bodySize)
+	lh := lineH(bodySize)
 	for i, cell := range row {
-		usable := ws[i] - 2*cellPadX
-		lines, size := r.cellLines(CellText(cell), usable, bodySize, "", cols[i].Wrap)
-		if len(lines) < 1 {
+		if cell == nil {
 			continue
 		}
-		h := float64(len(lines))*lineH(size) + 2*cellPadY
+		usable := ws[i] - 2*cellPadX
+		lines := r.wrapText(r.cellText(cell, cols[i]), usable)
+		if len(lines) == 0 {
+			continue
+		}
+		h := float64(len(lines))*lh + 2*cellPadY
 		if h > max {
 			max = h
 		}
 	}
-	if max == 0 {
-		max = lineH(bodySize) + 2*cellPadY
-	}
 	return max
-}
-
-func (r *pdfRender) drawCell(cell any, col Col, i int, x, y, w, rh float64) {
-	text := CellText(cell)
-	if text == "" {
-		return
-	}
-	usable := w - 2*cellPadX
-	align := r.cellAlign(col, i)
-	lines, size := r.cellLines(text, usable, bodySize, "", col.Wrap)
-	r.font("", size)
-	lh := lineH(size)
-	ly := y + cellPadY
-	for _, ln := range lines {
-		p := r.p
-		p.SetXY(x+cellPadX, ly)
-		p.CellFormat(usable, lh, string(ln), "", 0, align, false, 0, "")
-		ly += lh
-	}
 }
 
 func (r *pdfRender) drawRow(row []any, cols []Col, ws []float64, rh float64) {
@@ -264,18 +370,39 @@ func (r *pdfRender) drawRow(row []any, cols []Col, ws []float64, rh float64) {
 	p.SetY(y + rh)
 }
 
+func (r *pdfRender) drawCell(cell any, col Col, i int, x, y, w, rh float64) {
+	if cell == nil {
+		return
+	}
+	text := r.cellText(cell, col)
+	if text == "" {
+		return
+	}
+	usable := w - 2*cellPadX
+	align := r.cellAlign(col, i)
+	r.font("", bodySize)
+	lh := lineH(bodySize)
+	ly := y + cellPadY
+	for _, ln := range r.wrapText(text, usable) {
+		p := r.p
+		p.SetXY(x+cellPadX, ly)
+		p.CellFormat(usable, lh, ln, "", 0, align, false, 0, "")
+		ly += lh
+	}
+}
+
 func (r *pdfRender) drawTotal(row []any, cols []Col, ws []float64, rh float64, merge int) {
 	p := r.p
 	y := p.GetY()
 	x := pdfLeft
-	p.SetFillColor(0xD9, 0xE2, 0xF3)
+	r.font("B", bodySize)
 	i := 0
 	if merge > 0 && len(row) >= merge {
 		mw := 0.0
 		for j := 0; j < merge; j++ {
 			mw += ws[j]
 		}
-		p.Rect(x, y, mw, rh, "DF")
+		p.Rect(x, y, mw, rh, "D")
 		label := ""
 		for j := 0; j < merge; j++ {
 			if s := CellText(row[j]); s != "" {
@@ -285,40 +412,29 @@ func (r *pdfRender) drawTotal(row []any, cols []Col, ws []float64, rh float64, m
 		}
 		if label != "" {
 			usable := mw - 2*cellPadX
-			lines, size := r.cellLines(label, usable, bodySize, "B", true)
-			r.font("B", size)
-			lh := lineH(size)
-			ly := y + (rh-lh*float64(len(lines)))/2
-			for _, ln := range lines {
-				p.SetXY(x+cellPadX, ly)
-				p.CellFormat(usable, lh, string(ln), "", 0, "C", false, 0, "")
-				ly += lh
-			}
+			lh := lineH(bodySize)
+			ly := y + (rh-lh)/2
+			p.SetXY(x+cellPadX, ly)
+			p.CellFormat(usable, lh, label, "", 0, "C", false, 0, "")
 		}
 		x += mw
 		i = merge
 	}
 	for ; i < len(row); i++ {
 		cell := row[i]
-		p.Rect(x, y, ws[i], rh, "DF")
-		text := CellText(cell)
+		p.Rect(x, y, ws[i], rh, "D")
+		text := r.cellText(cell, cols[i])
 		if text != "" {
 			usable := ws[i] - 2*cellPadX
 			align := r.cellAlign(cols[i], i)
-			lines, size := r.cellLines(text, usable, bodySize, "B", cols[i].Wrap)
-			r.font("B", size)
-			lh := lineH(size)
-			ly := y + cellPadY
-			for _, ln := range lines {
-				p.SetXY(x+cellPadX, ly)
-				p.CellFormat(usable, lh, string(ln), "", 0, align, false, 0, "")
-				ly += lh
-			}
+			lh := lineH(bodySize)
+			ly := y + (rh-lh)/2
+			p.SetXY(x+cellPadX, ly)
+			p.CellFormat(usable, lh, text, "", 0, align, false, 0, "")
 		}
 		x += ws[i]
 	}
 	p.SetY(y + rh)
-	p.SetTextColor(0, 0, 0)
 }
 
 func (r *pdfRender) drawSig(sig SigData, ws []float64) {
@@ -329,50 +445,31 @@ func (r *pdfRender) drawSig(sig SigData, ws []float64) {
 	}
 	half := total / 2
 	rightX := pdfLeft + half
-	r.font("", 10)
-	p.Ln(4)
-	p.SetX(rightX)
-	p.CellFormat(half, 7, r.txt(sig.DateText), "", 2, "R", false, 0, "")
-	p.Ln(4)
-	r.font("", 10)
-	p.SetX(pdfLeft)
-	p.CellFormat(half, 7, r.txt(sig.HeadLeft), "", 0, "L", false, 0, "")
-	p.SetX(rightX)
-	p.CellFormat(half, 7, r.txt(sig.HeadRight), "", 2, "R", false, 0, "")
-	p.Ln(16)
-	r.font("B", 10)
-	p.SetX(pdfLeft)
-	p.CellFormat(half, 7, r.txt(sig.NameLeft), "", 0, "L", false, 0, "")
-	p.SetX(rightX)
-	p.CellFormat(half, 7, r.txt(sig.NameRight), "", 2, "R", false, 0, "")
-	r.font("", 10)
-	p.SetX(pdfLeft)
-	p.CellFormat(half, 7, r.txt(sig.NipLeft), "", 0, "L", false, 0, "")
-	p.SetX(rightX)
-	p.CellFormat(half, 7, r.txt(sig.NipRight), "", 2, "R", false, 0, "")
-}
-
-var cp1252High = map[rune]byte{
-	'€': 0x80, '‚': 0x82, 'ƒ': 0x83, '„': 0x84, '…': 0x85, '†': 0x86,
-	'‡': 0x87, 'ˆ': 0x88, '‰': 0x89, 'Š': 0x8A, '‹': 0x8B, 'Œ': 0x8C,
-	'Ž': 0x8E, '‘': 0x91, '’': 0x92, '“': 0x93, '”': 0x94, '•': 0x95,
-	'–': 0x96, '—': 0x97, '˜': 0x98, '™': 0x99, 'š': 0x9A, '›': 0x9B,
-	'œ': 0x9C, 'ž': 0x9E, 'Ÿ': 0x9F,
-}
-
-func toCp1252(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r >= 0x20 && r <= 0x7E, r >= 0xA0 && r <= 0xFF:
-			b.WriteRune(r)
-		default:
-			if c, ok := cp1252High[r]; ok {
-				b.WriteByte(c)
-			} else {
-				b.WriteByte('?')
-			}
-		}
+	// Seluruh blok tanda tangan (gap + tanggal + kepala + spasi + nama + NIP)
+	// harus muat di satu halaman; jika tidak, pindah ke halaman berikutnya.
+	topGap := lineH(footSize)
+	sigH := topGap + 6 + 6 + 18 + 6 + 6
+	if p.GetY()+sigH > r.pageH-pdfBot {
+		p.AddPage()
 	}
-	return b.String()
+	r.font("", footSize)
+	p.Ln(topGap)
+	p.SetX(rightX)
+	p.CellFormat(half, 6, sig.DateText, "", 2, "R", false, 0, "")
+	p.SetX(pdfLeft)
+	p.CellFormat(half, 6, sig.HeadLeft, "", 0, "L", false, 0, "")
+	p.SetX(rightX)
+	p.CellFormat(half, 6, sig.HeadRight, "", 2, "R", false, 0, "")
+	p.Ln(18)
+	r.font("B", footSize)
+	p.SetX(pdfLeft)
+	p.CellFormat(half, 6, sig.NameLeft, "", 0, "L", false, 0, "")
+	p.SetX(rightX)
+	p.CellFormat(half, 6, sig.NameRight, "", 2, "R", false, 0, "")
+	r.font("", footSize)
+	p.SetX(pdfLeft)
+	p.CellFormat(half, 6, sig.NipLeft, "", 0, "L", false, 0, "")
+	p.SetX(rightX)
+	p.CellFormat(half, 6, sig.NipRight, "", 2, "R", false, 0, "")
 }
+

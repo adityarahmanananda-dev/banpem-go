@@ -73,13 +73,13 @@ func (s *Server) buildLedgerReport(ctx context.Context, b *store.Bantuan, table 
 		title = "BUKU KAS BANK"
 	}
 	cols := []export.Col{
-		{Header: "No", Width: 12, ExWidth: 8},
-		{Header: "Tanggal", Width: 22, ExWidth: 14},
-		{Header: "No. Bukti", Width: 30, ExWidth: 16, Wrap: true, Flex: true},
-		{Header: "Uraian", Width: 100, ExWidth: 45, Wrap: true, Flex: true},
-		{Header: "Debet (Rp)", Width: 35, ExWidth: 18, Num: true},
-		{Header: "Kredit (Rp)", Width: 35, ExWidth: 18, Num: true},
-		{Header: "Saldo", Width: 35, ExWidth: 18, Num: true},
+		{Header: "No", Width: 8.7, ExWidth: 8, Center: true},
+		{Header: "Tanggal", Width: 20.9, ExWidth: 14, Center: true},
+		{Header: "No Bukti", Width: 26.1, ExWidth: 16, Wrap: true, Flex: true},
+		{Header: "Uraian", Width: 71.3, ExWidth: 45, Wrap: true, Flex: true},
+		{Header: "Debet (Rp)", Width: 15.7, ExWidth: 18, Num: true},
+		{Header: "Kredit (Rp)", Width: 15.7, ExWidth: 18, Num: true},
+		{Header: "Saldo (Rp)", Width: 15.7, ExWidth: 18, Num: true},
 	}
 	rep := export.Report{
 		Title:      title,
@@ -227,8 +227,8 @@ func (s *Server) buildRekapPajak(ctx context.Context, b *store.Bantuan, tglCetak
 		return export.Report{}, err
 	}
 	cols := []export.Col{
-		{Header: "No", Width: 8, ExWidth: 6},
-		{Header: "Tanggal", Width: 20, ExWidth: 14},
+		{Header: "No", Width: 8, ExWidth: 6, Center: true},
+		{Header: "Tanggal", Width: 20, ExWidth: 14, Center: true},
 		{Header: "NTB", Width: 20, ExWidth: 18, Wrap: true, Flex: true, Top: true},
 		{Header: "NTPN", Width: 20, ExWidth: 18, Wrap: true, Flex: true, Top: true},
 		{Header: "Uraian", Width: 70, ExWidth: 45, Wrap: true, Flex: true},
@@ -244,6 +244,7 @@ func (s *Server) buildRekapPajak(ctx context.Context, b *store.Bantuan, tglCetak
 		Subtitle:   b.Nama,
 		Cols:       cols,
 		TotalMerge: 5,
+		Landscape:  true,
 		Sig:        sigData(b, tglCetak),
 	}
 	var tBruto, tPPN, t21, t22, t23, tTotal int64
@@ -285,6 +286,7 @@ func (s *Server) buildRekapBelanja(ctx context.Context, b *store.Bantuan, tglCet
 		Subtitle:   b.Nama,
 		Cols:       cols,
 		TotalMerge: 5,
+		Landscape:  true,
 		Sig:        sigData(b, tglCetak),
 	}
 	penyedia := func(r store.BelanjaRow) string {
@@ -316,8 +318,8 @@ func (s *Server) buildDaftarTagihan(ctx context.Context, b *store.Bantuan, tglCe
 		return export.Report{}, err
 	}
 	cols := []export.Col{
-		{Header: "No", Width: 8, ExWidth: 6},
-		{Header: "Tanggal", Width: 17, ExWidth: 14},
+		{Header: "No", Width: 8, ExWidth: 6, Center: true},
+		{Header: "Tanggal", Width: 17, ExWidth: 14, Center: true},
 		{Header: "No. Bukti", Width: 27, ExWidth: 16, Wrap: true},
 		{Header: "Uraian", Width: 56, ExWidth: 36, Wrap: true},
 		{Header: "Nama Rekening / Bank / No.Rek", Width: 46, ExWidth: 30, Wrap: true, Top: true},
@@ -329,10 +331,11 @@ func (s *Server) buildDaftarTagihan(ctx context.Context, b *store.Bantuan, tglCe
 		{Header: "Jenis", Width: 24, ExWidth: 18, Wrap: true},
 	}
 	rep := export.Report{
-		Title:    "DAFTAR TAGIHAN",
-		Subtitle: sekolahNama(b),
-		Cols:     cols,
-		Sig:      sigData(b, tglCetak),
+		Title:     "DAFTAR TAGIHAN",
+		Subtitle:  b.Nama,
+		Cols:      cols,
+		Landscape: true,
+		Sig:       sigData(b, tglCetak),
 	}
 	for i, inv := range invoices {
 		admin := store.AdminFee(b.Bank, inv.Bank)

@@ -46,8 +46,8 @@
         <li class="nav-item"><a class="nav-link {{if eq .Active "bku"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/bku"><i class="bi bi-journal-text"></i> Buku Kas Umum</a></li>
         <li class="nav-item"><a class="nav-link {{if eq .Active "bank"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/bank"><i class="bi bi-bank"></i> Buku Kas Bank</a></li>
         <li class="nav-item"><a class="nav-link {{if eq .Active "tagihan"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/tagihan"><i class="bi bi-receipt"></i> Input Tagihan</a></li>
-        <li class="nav-item"><a class="nav-link {{if eq .Active "rekap"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/rekap-pajak"><i class="bi bi-pie-chart"></i> Rekap Pajak</a></li>
-        <li class="nav-item"><a class="nav-link" href="/bantuan/{{.Bantuan.ID}}/rekap-belanja"><i class="bi bi-list-check"></i> Rekap Belanja</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "rekap-pajak"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/rekap-pajak"><i class="bi bi-pie-chart"></i> Rekap Pajak</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "rekap-belanja"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/rekap-belanja"><i class="bi bi-list-check"></i> Rekap Belanja</a></li>
         <li class="nav-item"><a class="nav-link {{if eq .Active "master"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/kegiatan"><i class="bi bi-diagram-3"></i> Data Kegiatan</a></li>
         <li class="nav-item"><a class="nav-link" href="/bantuan/{{.Bantuan.ID}}/jasa-giro"><i class="bi bi-piggy-bank"></i> Jasa Giro</a></li>
         <li class="nav-item"><a class="nav-link" href="/bantuan/{{.Bantuan.ID}}/pencairan"><i class="bi bi-arrow-down-circle"></i> Pencairan</a></li>
