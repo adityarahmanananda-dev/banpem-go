@@ -94,7 +94,7 @@ func (s *Server) buildLedgerReport(ctx context.Context, b *store.Bantuan, table 
 		kredit := e.Kredit
 		saldo := e.Saldo
 		if e.JenisTransaksi == "saldo_awal" {
-			kredit = base
+			kredit = 0
 			saldo = base
 			running = base
 		} else {
@@ -105,8 +105,16 @@ func (s *Server) buildLedgerReport(ctx context.Context, b *store.Bantuan, table 
 		if e.Tanggal != nil {
 			tanggal = e.Tanggal.Format("02-01-2006")
 		}
+		// Nilai 0 ditampilkan kosong (kolom tidak diisi), konsisten dengan web.
+		var debitCell, kreditCell any = e.Debit, kredit
+		if e.Debit == 0 {
+			debitCell = nil
+		}
+		if kredit == 0 {
+			kreditCell = nil
+		}
 		rep.Rows = append(rep.Rows, []any{
-			e.Nomor, tanggal, e.NomorBukti, e.Uraian, e.Debit, kredit, saldo,
+			e.Nomor, tanggal, e.NomorBukti, e.Uraian, debitCell, kreditCell, saldo,
 		})
 		totDebit += e.Debit
 		totKredit += kredit

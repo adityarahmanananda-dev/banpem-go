@@ -50,14 +50,15 @@ type ledgerView struct {
 
 // applyVersion menghitung ulang saldo berjalan untuk tab aktif. Base adalah
 // nilai baris 'saldo_awal': total hibah (nominal) di tab rencana, atau nilai
-// pencairan pertama di tab real.
+// pencairan pertama di tab real. Baris saldo_awal hanya mengisi kolom SALDO;
+// kolom kredit dibiarkan kosong.
 func applyVersion(rows []store.Ledger, base int64) []ledgerView {
 	out := make([]ledgerView, 0, len(rows))
 	running := base
 	for _, e := range rows {
 		lv := ledgerView{Ledger: e, KreditDisp: e.Kredit, SaldoDisp: e.Saldo}
 		if e.JenisTransaksi == "saldo_awal" {
-			lv.KreditDisp = base
+			lv.KreditDisp = 0
 			lv.SaldoDisp = base
 			running = base
 		} else {
