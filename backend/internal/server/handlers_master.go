@@ -114,7 +114,7 @@ func (s *Server) handleSubKegiatanHapus(w http.ResponseWriter, r *http.Request) 
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/kegiatan")
 }
 
-func (s *Server) handleKomponenTambah(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAktivitasTambah(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")
 	if err != nil {
 		s.fail(w, r, err, "/")
@@ -122,12 +122,49 @@ func (s *Server) handleKomponenTambah(w http.ResponseWriter, r *http.Request) {
 	}
 	subID := formInt(r, "sub_kegiatan_id")
 	nama := formStr(r, "nama")
+	if subID > 0 && nama != "" {
+		if _, err := s.Store.CreateAktivitas(r.Context(), subID, nama); err != nil {
+			s.fail(w, r, err, "/bantuan/"+i64s(id)+"/kegiatan")
+			return
+		}
+		s.setFlash(w, "success", "Aktivitas berhasil ditambahkan.")
+	}
+	s.redirect(w, r, "/bantuan/"+i64s(id)+"/kegiatan")
+}
+
+func (s *Server) handleAktivitasHapus(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	aid, err := pathID(r, "aid")
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	if err := s.Store.DeleteAktivitas(r.Context(), aid); err != nil {
+		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/kegiatan")
+		return
+	}
+	s.setFlash(w, "success", "Aktivitas berhasil dihapus.")
+	s.redirect(w, r, "/bantuan/"+i64s(id)+"/kegiatan")
+}
+
+func (s *Server) handleKomponenTambah(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	aktID := formInt(r, "aktivitas_id")
+	nama := formStr(r, "nama")
 	pagu, perr := money.Parse(formStr(r, "pagu"))
 	if perr != nil || pagu < 0 {
 		pagu = 0
 	}
-	if subID > 0 && nama != "" {
-		if _, err := s.Store.CreateKomponen(r.Context(), subID, nama, pagu); err != nil {
+	if aktID > 0 && nama != "" {
+		if _, err := s.Store.CreateKomponen(r.Context(), aktID, nama, pagu); err != nil {
 			s.fail(w, r, err, "/bantuan/"+i64s(id)+"/kegiatan")
 			return
 		}
@@ -229,15 +266,32 @@ func (s *Server) handleAPISubKegiatan(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(rows)
 }
 
-// handleAPIKomponen: GET /api/bantuan/{id}/komponen?sub_kegiatan_id=X
-func (s *Server) handleAPIKomponen(w http.ResponseWriter, r *http.Request) {
+// handleAPIAktivitas: GET /api/bantuan/{id}/aktivitas?sub_kegiatan_id=X
+func (s *Server) handleAPIAktivitas(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")
 	if err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	skid := formInt(r, "sub_kegiatan_id")
-	rows, err := s.Store.ListKomponenBantuan(r.Context(), id, skid)
+	rows, err := s.Store.ListAktivitasBantuan(r.Context(), id, skid)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(rows)
+}
+
+// handleAPIKomponen: GET /api/bantuan/{id}/komponen?aktivitas_id=X
+func (s *Server) handleAPIKomponen(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	aktID := formInt(r, "aktivitas_id")
+	rows, err := s.Store.ListKomponenBantuan(r.Context(), id, aktID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

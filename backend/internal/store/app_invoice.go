@@ -397,7 +397,8 @@ func (s *Store) ListBelanja(ctx context.Context, bantuanID int64) ([]BelanjaRow,
 		JOIN trx_invoice i ON i.id = r.invoice_id
 		JOIN bantuan ba ON ba.id = i.bantuan_id
 		JOIN komponen ko ON ko.id = r.komponen_id
-		JOIN sub_kegiatan sk ON sk.id = ko.sub_kegiatan_id
+		JOIN aktivitas a ON a.id = ko.aktivitas_id
+		JOIN sub_kegiatan sk ON sk.id = a.sub_kegiatan_id
 		JOIN kegiatan k ON k.id = sk.kegiatan_id
 		WHERE i.bantuan_id=$1
 		GROUP BY i.sort_order, i.id, i.tanggal, i.uraian, i.nama_rekening, i.bank, i.nomor_rekening, i.npwp

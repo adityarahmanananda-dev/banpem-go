@@ -99,8 +99,15 @@ type SubKegiatan struct {
 type Komponen struct {
 	ID            int64
 	SubKegiatanID int64
+	AktivitasID   int64
 	Nama          string
 	Pagu          int64
+}
+
+type Aktivitas struct {
+	ID            int64
+	SubKegiatanID int64
+	Nama          string
 }
 
 type RekapPajak struct {

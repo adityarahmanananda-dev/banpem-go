@@ -1,0 +1,73 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-grid-1x2"></i> Rekap Realisasi</h4>
+  <a href="/bantuan/{{.Bantuan.ID}}/bku" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kembali</a>
+</div>
+
+<form method="get" class="card mb-3">
+  <div class="card-body">
+    <div class="text-muted small mb-2">Pilih level untuk digrouping (pivot) &mdash; boleh lebih dari satu:</div>
+    <div class="d-flex flex-wrap gap-3">
+      <label class="form-check">
+        <input class="form-check-input" type="checkbox" name="group_kegiatan" value="1" {{if .Sel.kegiatan}}checked{{end}}>
+        <span class="form-check-label">Kegiatan</span>
+      </label>
+      <label class="form-check">
+        <input class="form-check-input" type="checkbox" name="group_sub" value="1" {{if .Sel.sub}}checked{{end}}>
+        <span class="form-check-label">Sub Kegiatan</span>
+      </label>
+      <label class="form-check">
+        <input class="form-check-input" type="checkbox" name="group_aktivitas" value="1" {{if .Sel.aktivitas}}checked{{end}}>
+        <span class="form-check-label">Aktivitas</span>
+      </label>
+      <label class="form-check">
+        <input class="form-check-input" type="checkbox" name="group_komponen" value="1" {{if .Sel.komponen}}checked{{end}}>
+        <span class="form-check-label">Komponen</span>
+      </label>
+    </div>
+  </div>
+  <div class="card-footer d-flex flex-wrap gap-2">
+    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel"></i> Tampilkan</button>
+    <button type="submit" formaction="/bantuan/{{.Bantuan.ID}}/rekap-realisasi/export/excel" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-excel"></i> Export Excel</button>
+    <button type="submit" formaction="/bantuan/{{.Bantuan.ID}}/rekap-realisasi/export/word" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-word"></i> Export Word</button>
+  </div>
+</form>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light">
+        <tr>
+          {{range .Headers}}<th>{{.}}</th>{{end}}
+          <th class="text-end">Bruto</th>
+          <th class="text-end">PPN</th>
+          <th class="text-end">PPh</th>
+          <th class="text-end">Netto</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $row := .Rows}}
+        <tr>
+          {{range $row.Names}}<td>{{.}}</td>{{end}}
+          <td class="text-end">{{fmtMoney $row.Bruto}}</td>
+          <td class="text-end">{{fmtMoney $row.PPN}}</td>
+          <td class="text-end">{{fmtMoney $row.PPH}}</td>
+          <td class="text-end">{{fmtMoney $row.Netto}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="8" class="text-center text-muted">Belum ada realisasi.</td></tr>
+        {{end}}
+      </tbody>
+      <tfoot class="table-light fw-bold">
+        <tr>
+          <td colspan="{{len .Headers}}" class="text-end">TOTAL</td>
+          <td class="text-end">{{fmtMoney .Total.Bruto}}</td>
+          <td class="text-end">{{fmtMoney .Total.PPN}}</td>
+          <td class="text-end">{{fmtMoney .Total.PPH}}</td>
+          <td class="text-end">{{fmtMoney .Total.Netto}}</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{{end}}

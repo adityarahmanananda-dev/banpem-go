@@ -178,7 +178,7 @@
     toggleBupotFields();
   }
 
-  // ---- Master data kegiatan: cascade kegiatan > sub > komponen ----
+  // ---- Master data kegiatan: cascade kegiatan > sub > aktivitas > komponen ----
   var MASTER = window.MASTER || [];
   function masterOptions(arr, selected) {
     var opts = '<option value="">Pilih</option>';
@@ -197,13 +197,28 @@
     }
     return null;
   }
+  function findAktivitas(aktId) {
+    for (var i = 0; i < MASTER.length; i++) {
+      var subs = MASTER[i].Subs || [];
+      for (var j = 0; j < subs.length; j++) {
+        var acts = subs[j].Aktivitass || [];
+        for (var k = 0; k < acts.length; k++) {
+          if (Number(acts[k].ID) === Number(aktId)) return acts[k];
+        }
+      }
+    }
+    return null;
+  }
   function findKomponen(kid) {
     for (var i = 0; i < MASTER.length; i++) {
       var subs = MASTER[i].Subs || [];
       for (var j = 0; j < subs.length; j++) {
-        var ks = subs[j].Komponens || [];
-        for (var k = 0; k < ks.length; k++) {
-          if (Number(ks[k].ID) === Number(kid)) return ks[k];
+        var acts = subs[j].Aktivitass || [];
+        for (var k = 0; k < acts.length; k++) {
+          var ks = acts[k].Komponens || [];
+          for (var m = 0; m < ks.length; m++) {
+            if (Number(ks[m].ID) === Number(kid)) return ks[m];
+          }
         }
       }
     }
@@ -213,9 +228,12 @@
     for (var i = 0; i < MASTER.length; i++) {
       var subs = MASTER[i].Subs || [];
       for (var j = 0; j < subs.length; j++) {
-        var ks = subs[j].Komponens || [];
-        for (var k = 0; k < ks.length; k++) {
-          if (Number(ks[k].ID) === Number(kid)) return { keg: MASTER[i], sub: subs[j] };
+        var acts = subs[j].Aktivitass || [];
+        for (var k = 0; k < acts.length; k++) {
+          var ks = acts[k].Komponens || [];
+          for (var m = 0; m < ks.length; m++) {
+            if (Number(ks[m].ID) === Number(kid)) return { keg: MASTER[i], sub: subs[j], akt: acts[k] };
+          }
         }
       }
     }
@@ -225,14 +243,17 @@
   function initRealisasiRow(row) {
     var kegSel = row.querySelector(".r-kegiatan");
     var subSel = row.querySelector(".r-sub");
+    var aktSel = row.querySelector(".r-aktivitas");
     var komSel = row.querySelector(".r-komponen");
-    if (!kegSel || !subSel || !komSel) return;
+    if (!kegSel || !subSel || !aktSel || !komSel) return;
 
     var komID = komSel.getAttribute("data-komponen");
     var subID = subSel.getAttribute("data-sub");
+    var aktID = aktSel.getAttribute("data-aktivitas");
     var preselect = komID ? findKegByKomponen(komID) : null;
     if (preselect) {
       subID = preselect.sub.ID;
+      aktID = preselect.akt.ID;
     }
 
     kegSel.innerHTML = masterOptions(MASTER, preselect ? preselect.keg.ID : "");
@@ -241,28 +262,37 @@
       ? MASTER.filter(function (m) { return Number(m.ID) === Number(kegID); })[0].Subs || []
       : [];
     subSel.innerHTML = masterOptions(selectedSubs, subID);
-    if (kegID) {
-      subSel.disabled = false;
-    } else {
-      subSel.disabled = true;
-      komSel.disabled = true;
-    }
-    var selectedKoms = subID ? (findSub(subID) || {}).Komponens || [] : [];
+    subSel.disabled = !kegID;
+    var selectedActs = subID ? (findSub(subID) || {}).Aktivitass || [] : [];
+    aktSel.innerHTML = masterOptions(selectedActs, aktID);
+    aktSel.disabled = !subID;
+    var selectedKoms = aktID ? (findAktivitas(aktID) || {}).Komponens || [] : [];
     komSel.innerHTML = masterOptions(selectedKoms, komID);
+    komSel.disabled = !aktID;
 
     kegSel.addEventListener("change", function () {
       var k = kegSel.value;
       var subs = k ? MASTER.filter(function (m) { return Number(m.ID) === Number(k); })[0].Subs || [] : [];
       subSel.innerHTML = masterOptions(subs, "");
       subSel.disabled = !k;
+      aktSel.innerHTML = '<option value="">Pilih</option>';
+      aktSel.disabled = !k;
       komSel.innerHTML = '<option value="">Pilih</option>';
       komSel.disabled = !k;
     });
     subSel.addEventListener("change", function () {
       var sk = subSel.value;
-      var koms = sk ? (findSub(sk) || {}).Komponens || [] : [];
-      komSel.innerHTML = masterOptions(koms, "");
+      var acts = sk ? (findSub(sk) || {}).Aktivitass || [] : [];
+      aktSel.innerHTML = masterOptions(acts, "");
+      aktSel.disabled = !sk;
+      komSel.innerHTML = '<option value="">Pilih</option>';
       komSel.disabled = !sk;
+    });
+    aktSel.addEventListener("change", function () {
+      var ak = aktSel.value;
+      var koms = ak ? (findAktivitas(ak) || {}).Komponens || [] : [];
+      komSel.innerHTML = masterOptions(koms, "");
+      komSel.disabled = !ak;
     });
     var hapusBtn = row.querySelector(".r-hapus");
     if (hapusBtn) {
@@ -278,11 +308,12 @@
       var tpl = document.createElement("div");
       tpl.className = "realisasi-row row g-2 mb-2";
       tpl.innerHTML =
-        '<div class="col-12 col-md-3"><select class="form-select form-select-sm r-kegiatan"></select></div>' +
-        '<div class="col-12 col-md-3"><select class="form-select form-select-sm r-sub"></select></div>' +
-        '<div class="col-12 col-md-3"><select class="form-select form-select-sm r-komponen" name="komponen_id"></select></div>' +
+        '<div class="col-12 col-md-2"><select class="form-select form-select-sm r-kegiatan"></select></div>' +
+        '<div class="col-12 col-md-2"><select class="form-select form-select-sm r-sub"></select></div>' +
+        '<div class="col-12 col-md-2"><select class="form-select form-select-sm r-aktivitas"></select></div>' +
+        '<div class="col-12 col-md-2"><select class="form-select form-select-sm r-komponen" name="komponen_id"></select></div>' +
         '<div class="col-6 col-md-2"><input type="text" class="form-control form-control-sm money-input r-bruto" name="bruto"></div>' +
-        '<div class="col-6 col-md-1 d-flex align-items-center"><button type="button" class="btn btn-outline-danger btn-sm r-hapus"><i class="bi bi-x-lg"></i></button></div>';
+        '<div class="col-6 col-md-2 d-flex align-items-center"><button type="button" class="btn btn-outline-danger btn-sm r-hapus"><i class="bi bi-x-lg"></i></button></div>';
       rowsContainer.appendChild(tpl);
       var inp = tpl.querySelector(".money-input");
       inp.addEventListener("input", function () {

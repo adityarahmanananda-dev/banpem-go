@@ -137,19 +137,22 @@
         <div id="realisasiRows">
           {{range .Realisasi}}
           <div class="realisasi-row row g-2 mb-2">
-            <div class="col-12 col-md-3">
+            <div class="col-12 col-md-2">
               <select class="form-select form-select-sm r-kegiatan"></select>
             </div>
-            <div class="col-12 col-md-3">
+            <div class="col-12 col-md-2">
               <select class="form-select form-select-sm r-sub" data-sub="{{.SubKegiatanID}}"></select>
             </div>
-            <div class="col-12 col-md-3">
+            <div class="col-12 col-md-2">
+              <select class="form-select form-select-sm r-aktivitas" data-aktivitas="{{.AktivitasID}}"></select>
+            </div>
+            <div class="col-12 col-md-2">
               <select class="form-select form-select-sm r-komponen" name="komponen_id" data-komponen="{{.KomponenID}}"></select>
             </div>
             <div class="col-6 col-md-2">
               <input type="text" class="form-control form-control-sm money-input r-bruto" name="bruto" value="{{if .Bruto}}{{fmtMoneyNoRp .Bruto}}{{end}}">
             </div>
-            <div class="col-6 col-md-1 d-flex align-items-center">
+            <div class="col-6 col-md-2 d-flex align-items-center">
               <button type="button" class="btn btn-outline-danger btn-sm r-hapus"><i class="bi bi-x-lg"></i></button>
             </div>
           </div>

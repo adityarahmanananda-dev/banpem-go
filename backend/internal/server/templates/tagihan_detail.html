@@ -36,7 +36,7 @@
   <div class="table-responsive">
     <table class="table table-sm mb-0">
       <thead class="table-light">
-        <tr><th>No</th><th>Kegiatan</th><th>Sub Kegiatan</th><th>Komponen</th><th class="text-end">Bruto</th></tr>
+        <tr><th>No</th><th>Kegiatan</th><th>Sub Kegiatan</th><th>Aktivitas</th><th>Komponen</th><th class="text-end">Bruto</th></tr>
       </thead>
       <tbody>
         {{range $i, $rl := .Realisasi}}
@@ -44,6 +44,7 @@
           <td>{{inc $i}}</td>
           <td>{{$rl.Kegiatan}}</td>
           <td>{{$rl.SubKegiatan}}</td>
+          <td>{{$rl.Aktivitas}}</td>
           <td>{{$rl.Komponen}}</td>
           <td class="text-end">{{fmtMoney $rl.Bruto}}</td>
         </tr>

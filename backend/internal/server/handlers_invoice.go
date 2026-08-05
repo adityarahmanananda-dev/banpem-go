@@ -14,9 +14,11 @@ type realisasiView struct {
 	KomponenID    int64
 	KegiatanID    int64
 	SubKegiatanID int64
+	AktivitasID   int64
 	Bruto         int64
 	Kegiatan      string
 	SubKegiatan   string
+	Aktivitas     string
 	Komponen      string
 }
 
@@ -72,8 +74,8 @@ func (s *Server) invoiceFormData(r *http.Request, iid int64, edit bool) (*invoic
 			}
 			v.Realisasi = append(v.Realisasi, realisasiView{
 				KomponenID: rl.KomponenID, Bruto: rl.Bruto,
-				KegiatanID: ch.KegiatanID, SubKegiatanID: ch.SubID,
-				Kegiatan: ch.KegiatanNama, SubKegiatan: ch.SubNama, Komponen: ch.KomponenNama,
+				KegiatanID: ch.KegiatanID, SubKegiatanID: ch.SubID, AktivitasID: ch.AktivitasID,
+				Kegiatan: ch.KegiatanNama, SubKegiatan: ch.SubNama, Aktivitas: ch.AktivitasNama, Komponen: ch.KomponenNama,
 			})
 		}
 	}
@@ -283,8 +285,8 @@ func (s *Server) handleTagihanDetail(w http.ResponseWriter, r *http.Request) {
 		}
 		rv = append(rv, realisasiView{
 			KomponenID: rl.KomponenID, Bruto: rl.Bruto,
-			KegiatanID: ch.KegiatanID, SubKegiatanID: ch.SubID,
-			Kegiatan: ch.KegiatanNama, SubKegiatan: ch.SubNama, Komponen: ch.KomponenNama,
+			KegiatanID: ch.KegiatanID, SubKegiatanID: ch.SubID, AktivitasID: ch.AktivitasID,
+			Kegiatan: ch.KegiatanNama, SubKegiatan: ch.SubNama, Aktivitas: ch.AktivitasNama, Komponen: ch.KomponenNama,
 		})
 	}
 	ledgerRows, _ := store.ListLedger(r.Context(), s.Store.Pool, id, "bku")

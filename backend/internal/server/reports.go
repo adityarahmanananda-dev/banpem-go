@@ -311,6 +311,55 @@ func (s *Server) buildRekapBelanja(ctx context.Context, b *store.Bantuan, tglCet
 	return rep, nil
 }
 
+// buildRekapRealisasi membuat laporan Rekap Realisasi (pivot) sesuai level
+// yang dipilih (groups).
+func (s *Server) buildRekapRealisasi(ctx context.Context, b *store.Bantuan, groups []string, tglCetak time.Time) (export.Report, error) {
+	rows, total, err := s.Store.ListRealisasiPivot(ctx, b.ID, groups)
+	if err != nil {
+		return export.Report{}, err
+	}
+	var cols []export.Col
+	width := map[string]float64{"kegiatan": 30, "sub": 30, "aktivitas": 30, "komponen": 30}
+	for _, g := range groups {
+		label := g
+		for _, def := range pivotLevelDefs {
+			if def.Key == g {
+				label = def.Name
+			}
+		}
+		cols = append(cols, export.Col{Header: label, Width: width[g], ExWidth: 22, Wrap: true, Flex: true})
+	}
+	cols = append(cols,
+		export.Col{Header: "Bruto", Width: 24, ExWidth: 18, Num: true},
+		export.Col{Header: "PPN", Width: 22, ExWidth: 16, Num: true},
+		export.Col{Header: "PPh", Width: 22, ExWidth: 16, Num: true},
+		export.Col{Header: "Netto", Width: 24, ExWidth: 18, Num: true},
+	)
+	rep := export.Report{
+		Title:      "REKAP REALISASI",
+		Subtitle:   b.Nama,
+		Cols:       cols,
+		Landscape:  true,
+		TotalMerge: len(groups),
+		Sig:        sigData(b, tglCetak),
+	}
+	for _, row := range rows {
+		cell := make([]any, 0, len(groups)+4)
+		for _, g := range groups {
+			cell = append(cell, pivotName(row, g))
+		}
+		cell = append(cell, row.Bruto, row.PPN, row.PPH, row.Netto)
+		rep.Rows = append(rep.Rows, cell)
+	}
+	totalRow := make([]any, 0, len(groups)+4)
+	for i := 0; i < len(groups); i++ {
+		totalRow = append(totalRow, "")
+	}
+	totalRow = append(totalRow, total.Bruto, total.PPN, total.PPH, total.Netto)
+	rep.TotalRow = totalRow
+	return rep, nil
+}
+
 // buildDaftarTagihan membuat laporan Daftar Tagihan.
 func (s *Server) buildDaftarTagihan(ctx context.Context, b *store.Bantuan, tglCetak time.Time) (export.Report, error) {
 	invoices, err := s.Store.ListInvoices(ctx, b.ID, "sort")
