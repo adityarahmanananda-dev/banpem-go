@@ -171,17 +171,25 @@ func wordDocumentXML(rep Report, landscape bool) string {
 	b.WriteString("</w:tr>")
 
 	// Baris data.
-	for _, row := range rep.Rows {
+	for i, row := range rep.Rows {
 		b.WriteString("<w:tr><w:trPr><w:cantSplit/></w:trPr>")
-		for i, cell := range row {
+		bold := i < len(rep.RowBold) && rep.RowBold[i]
+		noBorder := i < len(rep.RowNoBorder) && rep.RowNoBorder[i]
+		for j, cell := range row {
+			if rep.Cols[j].Money {
+				if _, ok := cell.(int64); ok {
+					b.WriteString(wmoney(CellText(cell), cellOpts{wTwips: twips[j], bold: bold, noBorder: noBorder}))
+					continue
+				}
+			}
 			align := "left"
-			if rep.Cols[i].Num {
+			if rep.Cols[j].Num {
 				align = "right"
 			}
-			if i == 0 && !rep.Cols[i].Num {
+			if j == 0 && !rep.Cols[j].Num && !rep.Cols[j].Left {
 				align = "center"
 			}
-			b.WriteString(wcell(CellText(cell), cellOpts{wTwips: twips[i], align: align}))
+			b.WriteString(wcell(CellText(cell), cellOpts{wTwips: twips[j], align: align, bold: bold, noBorder: noBorder}))
 		}
 		b.WriteString("</w:tr>")
 	}
@@ -214,6 +222,14 @@ func wordDocumentXML(rep Report, landscape bool) string {
 			}))
 		}
 		for i := m; i < len(rep.TotalRow); i++ {
+			if rep.Cols[i].Money {
+				if _, ok := rep.TotalRow[i].(int64); ok {
+					b.WriteString(wmoney(CellText(rep.TotalRow[i]), cellOpts{
+						wTwips: twips[i], bold: true, fill: wordTotalFill, keepNext: true,
+					}))
+					continue
+				}
+			}
 			align := "left"
 			if rep.Cols[i].Num {
 				align = "right"
@@ -230,6 +246,11 @@ func wordDocumentXML(rep Report, landscape bool) string {
 	}
 
 	b.WriteString("</w:tbl>")
+
+	// Satu paragraf kosong pemisah: memastikan blok tanda tangan tidak menyatu
+	// dengan tabel (jadi border hanya sampai baris TOTAL) sekaligus memberi
+	// jarak 1 baris kosong sebelum baris tanggal cetak.
+	b.WriteString(wp("", "", false, 0, 0, false))
 
 	// Blok tanda tangan dibuat dalam tabel terpisah TANPA border agar kolom
 	// tanda tangan tidak ikut bergaris.
@@ -325,13 +346,7 @@ func wordSignatureTable(sig SigData, twips []int) string {
 		wTwips: total, align: "right", gridSpan: n, keepNext: true,
 	}))
 	b.WriteString("</w:tr>")
-	// Baris kosong x2.
-	for i := 0; i < 2; i++ {
-		b.WriteString(`<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="340" w:hRule="exact"/></w:trPr>`)
-		b.WriteString(wcell("", cellOpts{wTwips: total, gridSpan: n, keepNext: true}))
-		b.WriteString("</w:tr>")
-	}
-	// Kepala | Bendahara.
+	// Kepala | Bendahara (langsung di bawah baris tanggal, tanpa spasi).
 	b.WriteString("<w:tr><w:trPr><w:cantSplit/></w:trPr>")
 	b.WriteString(wcell(sig.HeadLeft, cellOpts{wTwips: leftTw, align: "left", gridSpan: k, keepNext: true}))
 	b.WriteString(wcell(sig.HeadRight, cellOpts{wTwips: total - leftTw, align: "right", gridSpan: n - k, keepNext: true}))
@@ -363,6 +378,7 @@ type cellOpts struct {
 	color    string
 	gridSpan int
 	keepNext bool
+	noBorder bool
 }
 
 func wcell(text string, o cellOpts) string {
@@ -372,6 +388,9 @@ func wcell(text string, o cellOpts) string {
 	b.WriteString(fmt.Sprintf(`<w:tcW w:w="%d" w:type="dxa"/>`, o.wTwips))
 	if o.gridSpan > 1 {
 		b.WriteString(fmt.Sprintf(`<w:gridSpan w:val="%d"/>`, o.gridSpan))
+	}
+	if o.noBorder {
+		b.WriteString(`<w:tcBorders><w:top w:val="nil"/><w:bottom w:val="nil"/></w:tcBorders>`)
 	}
 	if o.fill != "" {
 		b.WriteString(fmt.Sprintf(`<w:shd w:val="clear" w:color="auto" w:fill="%s"/>`, o.fill))
@@ -407,6 +426,46 @@ func wcell(text string, o cellOpts) string {
 		}
 		b.WriteString("</w:t></w:r>")
 	}
+	b.WriteString("</w:p></w:tc>")
+	return b.String()
+}
+
+// wmoney menyusun cell uang gaya pembukuan: "Rp." menempel di kiri cell dan
+// angka menempel di kanan cell lewat tab stop rata kanan selebar cell.
+func wmoney(amount string, o cellOpts) string {
+	var b strings.Builder
+	b.WriteString("<w:tc>")
+	b.WriteString("<w:tcPr>")
+	b.WriteString(fmt.Sprintf(`<w:tcW w:w="%d" w:type="dxa"/>`, o.wTwips))
+	if o.noBorder {
+		b.WriteString(`<w:tcBorders><w:top w:val="nil"/><w:bottom w:val="nil"/></w:tcBorders>`)
+	}
+	if o.fill != "" {
+		b.WriteString(fmt.Sprintf(`<w:shd w:val="clear" w:color="auto" w:fill="%s"/>`, o.fill))
+	}
+	b.WriteString("<w:vAlign w:val=\"center\"/>")
+	b.WriteString("</w:tcPr>")
+
+	b.WriteString("<w:p><w:pPr>")
+	if o.keepNext {
+		b.WriteString("<w:keepNext/>")
+	}
+	b.WriteString(fmt.Sprintf(`<w:tabs><w:tab w:val="right" w:pos="%d"/></w:tabs>`, o.wTwips))
+	b.WriteString("</w:pPr>")
+
+	run := func(t string) {
+		b.WriteString("<w:r><w:rPr>")
+		if o.bold {
+			b.WriteString("<w:b/>")
+		}
+		b.WriteString("<w:sz w:val=\"18\"/><w:szCs w:val=\"18\"/>")
+		b.WriteString("</w:rPr>")
+		b.WriteString(`<w:t xml:space="preserve">` + escXML(t) + `</w:t></w:r>`)
+	}
+	run("Rp.")
+	b.WriteString("<w:r><w:tab/></w:r>")
+	run(amount)
+
 	b.WriteString("</w:p></w:tc>")
 	return b.String()
 }

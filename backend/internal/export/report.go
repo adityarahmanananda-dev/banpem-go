@@ -24,6 +24,11 @@ type Col struct {
 	Center bool
 	// Top menandai perataan vertikal atas (untuk Excel NTB/NTPN).
 	Top bool
+	// Left memaksa perataan kiri pada kolom pertama (untuk hierarki berjenjang).
+	Left bool
+	// Money menandai kolom uang gaya pembukuan: "Rp." di kiri cell dan angka
+	// menempel di kanan cell (format akuntansi Excel).
+	Money bool
 }
 
 // SigData adalah blok tanda tangan laporan.
@@ -45,6 +50,12 @@ type Report struct {
 	Cols     []Col
 	Rows     [][]any
 	TotalRow []any // nil jika tanpa TOTAL
+	// RowBold menandai baris data yang harus dicetak tebal (baris subtotal
+	// pada pivot berjenjang). Panjangnya menyusul baris Rows.
+	RowBold []bool
+	// RowNoBorder menandai baris data yang dicetak TANPA border (mis. baris
+	// komponen pada RAB). Panjangnya menyusul baris Rows.
+	RowNoBorder []bool
 	// TotalMerge jumlah kolom awal pada baris TOTAL yang digabung menjadi satu
 	// cell label (mis. "TOTAL") yang dirapikan di tengah.
 	TotalMerge int

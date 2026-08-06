@@ -10,36 +10,36 @@
 
 {{if .Stats}}
 <div class="row g-3">
-  {{range .Stats}}
+  {{range $i, $s := .Stats}}
   <div class="col-12 col-md-6 col-xl-4">
     <div class="card h-100">
-      <div class="card-header bg-primary text-white fw-bold">
-        <i class="bi bi-building"></i> {{.Nama}}
-        {{if .NamaSekolah}}<div class="small fw-normal">{{.NamaSekolah}}</div>{{end}}
+      <div class="card-header {{kegColor $i}} fw-bold">
+        <i class="bi bi-building"></i> {{$s.Nama}}
+        {{if $s.NamaSekolah}}<div class="small fw-normal">{{$s.NamaSekolah}}</div>{{end}}
       </div>
       <div class="card-body small">
-        <div class="d-flex justify-content-between"><span class="text-muted">Saldo Berjalan</span><b>{{fmtMoney .SaldoBKU}}</b></div>
-        <div class="d-flex justify-content-between"><span class="text-muted">Saldo Bank</span><b>{{fmtMoney .SaldoBank}}</b></div>
-        <div class="d-flex justify-content-between"><span class="text-muted">Nominal</span><b>{{if .Nominal}}{{fmtMoney .Nominal}}{{else}}-{{end}}</b></div>
-        <div class="d-flex justify-content-between"><span class="text-muted">Dana Turun</span><b>{{fmtMoney .TotalTurun}}</b></div>
-        <div class="d-flex justify-content-between"><span class="text-muted">Bank / No. Rekening</span><b>{{.NamaRekening}} {{.NomorRekening}}</b></div>
-        <div class="d-flex justify-content-between"><span class="text-muted">Jumlah Tagihan</span><b>{{.InvoiceCount}}</b></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Saldo Berjalan</span><b>{{fmtMoney $s.SaldoBKU}}</b></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Saldo Bank</span><b>{{fmtMoney $s.SaldoBank}}</b></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Nominal</span><b>{{if $s.Nominal}}{{fmtMoney $s.Nominal}}{{else}}-{{end}}</b></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Dana Turun</span><b>{{fmtMoney $s.TotalTurun}}</b></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Bank / No. Rekening</span><b>{{$s.NamaRekening}} {{$s.NomorRekening}}</b></div>
+        <div class="d-flex justify-content-between"><span class="text-muted">Jumlah Tagihan</span><b>{{$s.InvoiceCount}}</b></div>
       </div>
       <div class="card-footer">
         <div class="row g-1">
           <div class="col-6 d-flex flex-column gap-1">
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/bku">BKU</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/bank">Bank</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/tagihan">Input Tagihan</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/rekap-pajak">Rekap Pajak</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/rekap-belanja">Rekap Belanja</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/bku">BKU</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/bank">Bank</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/tagihan">Input Tagihan</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/rekap-pajak">Rekap Pajak</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/rekap-belanja">Rekap Belanja</a>
           </div>
           <div class="col-6 d-flex flex-column gap-1">
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/kegiatan">Data Kegiatan</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/jasa-giro">Jasa Giro</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/pencairan">Pencairan</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/saldo-awal">Set Saldo Awal</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{.ID}}/edit">Edit Bantuan</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/kegiatan">Rencana Anggaran Biaya</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/jasa-giro">Jasa Giro</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/pencairan">Pencairan</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/saldo-awal">Set Saldo Awal</a>
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/edit">Edit Bantuan</a>
           </div>
         </div>
       </div>

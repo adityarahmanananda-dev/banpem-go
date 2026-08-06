@@ -2,7 +2,9 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"ebku/internal/money"
 	"ebku/internal/store"
@@ -34,7 +36,7 @@ func (s *Server) handleKegiatan(w http.ResponseWriter, r *http.Request) {
 		Tree      []store.KegiatanTree
 		TotalPagu int64
 	}{
-		baseView: baseView{Title: "Data Kegiatan", Active: "master", FlashType: ft, FlashMsg: fm,
+		baseView: baseView{Title: "Rencana Anggaran Biaya", Active: "master", FlashType: ft, FlashMsg: fm,
 			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
 		Tree: tree, TotalPagu: totalPagu,
 	}
@@ -158,17 +160,29 @@ func (s *Server) handleKomponenTambah(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	aktID := formInt(r, "aktivitas_id")
-	nama := formStr(r, "nama")
-	pagu, perr := money.Parse(formStr(r, "pagu"))
-	if perr != nil || pagu < 0 {
-		pagu = 0
-	}
-	if aktID > 0 && nama != "" {
+	_ = r.ParseForm()
+	names := r.PostForm["nama"]
+	pagus := r.PostForm["pagu"]
+	created := 0
+	for i, nama := range names {
+		nama = strings.TrimSpace(nama)
+		if nama == "" {
+			continue
+		}
+		pagu := int64(0)
+		if i < len(pagus) {
+			if p, perr := money.Parse(pagus[i]); perr == nil && p >= 0 {
+				pagu = p
+			}
+		}
 		if _, err := s.Store.CreateKomponen(r.Context(), aktID, nama, pagu); err != nil {
 			s.fail(w, r, err, "/bantuan/"+i64s(id)+"/kegiatan")
 			return
 		}
-		s.setFlash(w, "success", "Komponen berhasil ditambahkan.")
+		created++
+	}
+	if created > 0 {
+		s.setFlash(w, "success", fmt.Sprintf("%d komponen berhasil ditambahkan.", created))
 	}
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/kegiatan")
 }

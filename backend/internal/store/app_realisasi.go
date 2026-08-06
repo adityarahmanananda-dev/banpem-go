@@ -12,42 +12,26 @@ type PivotRow struct {
 	SubKeg    string
 	Aktivitas string
 	Komponen  string
-	Bruto     int64
-	PPN       int64
-	PPH       int64
-	Netto     int64
-}
-
-func pivotCol(g string) string {
-	switch g {
-	case "kegiatan":
-		return "k.nama"
-	case "sub":
-		return "sk.nama"
-	case "aktivitas":
-		return "a.nama"
-	default:
-		return "ko.nama"
-	}
+	// Pagu adalah jumlah pagu anggaran komponen-komponen pada grup (dihitung
+	// sekali per komponen, tidak berlipat walau komponen punya banyak realisasi).
+	Pagu int64
+	// Realisasi adalah total nilai realisasi (bruto) pada grup.
+	Realisasi int64
+	// Sisa = Pagu - Realisasi.
+	Sisa int64
 }
 
 // ListRealisasiPivot mengagregasi realisasi belanja berdasarkan level yang
 // dipilih (groups berisi urutan "kegiatan", "sub", "aktivitas", "komponen").
 // groups kosong => default semua level (paling detail). Mengembalikan baris
-// + grand total.
+// + grand total. Pagu dihitung per komponen (tidak terhitung ganda) dengan
+// cara mengagregasi realisasi ke level komponen terlebih dahulu.
 func (s *Store) ListRealisasiPivot(ctx context.Context, bantuanID int64, groups []string) ([]PivotRow, PivotRow, error) {
 	if len(groups) == 0 {
 		groups = []string{"kegiatan", "sub", "aktivitas", "komponen"}
 	}
-	var sel []string
-	for _, g := range groups {
-		sel = append(sel, pivotCol(g))
-	}
-	groupBy := strings.Join(sel, ", ")
-	orderBy := strings.Join(sel, ", ")
-
-	rows, err := s.Pool.Query(ctx, `SELECT `+groupBy+`,
-		COALESCE(SUM(r.bruto),0), COALESCE(SUM(r.nilai_ppn),0), COALESCE(SUM(r.nilai_pph),0), COALESCE(SUM(r.nilai_netto),0)
+	rows, err := s.Pool.Query(ctx, `SELECT k.nama, sk.nama, a.nama, ko.nama, ko.pagu,
+		COALESCE(SUM(r.bruto),0)
 		FROM trx_invoice_realisasi r
 		JOIN trx_invoice i ON i.id = r.invoice_id
 		JOIN komponen ko ON ko.id = r.komponen_id
@@ -55,39 +39,85 @@ func (s *Store) ListRealisasiPivot(ctx context.Context, bantuanID int64, groups 
 		JOIN sub_kegiatan sk ON sk.id = a.sub_kegiatan_id
 		JOIN kegiatan k ON k.id = sk.kegiatan_id
 		WHERE i.bantuan_id=$1
-		GROUP BY `+groupBy+`
-		ORDER BY `+orderBy, bantuanID)
+		GROUP BY ko.id, k.nama, sk.nama, a.nama, ko.nama
+		ORDER BY k.nama, sk.nama, a.nama, ko.nama`, bantuanID)
 	if err != nil {
 		return nil, PivotRow{}, err
 	}
 	defer rows.Close()
 
-	var out []PivotRow
-	var total PivotRow
+	type komp struct {
+		names [4]string
+		pagu  int64
+		real  int64
+	}
+	var krows []komp
 	for rows.Next() {
-		var row PivotRow
-		var dst []any
-		for _, g := range groups {
-			switch g {
-			case "kegiatan":
-				dst = append(dst, &row.Kegiatan)
-			case "sub":
-				dst = append(dst, &row.SubKeg)
-			case "aktivitas":
-				dst = append(dst, &row.Aktivitas)
-			case "komponen":
-				dst = append(dst, &row.Komponen)
-			}
-		}
-		dst = append(dst, &row.Bruto, &row.PPN, &row.PPH, &row.Netto)
-		if err := rows.Scan(dst...); err != nil {
+		var k komp
+		if err := rows.Scan(&k.names[0], &k.names[1], &k.names[2], &k.names[3], &k.pagu, &k.real); err != nil {
 			return nil, PivotRow{}, err
 		}
-		out = append(out, row)
-		total.Bruto += row.Bruto
-		total.PPN += row.PPN
-		total.PPH += row.PPH
-		total.Netto += row.Netto
+		krows = append(krows, k)
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, PivotRow{}, err
+	}
+
+	var idx []int
+	for _, g := range groups {
+		switch g {
+		case "kegiatan":
+			idx = append(idx, 0)
+		case "sub":
+			idx = append(idx, 1)
+		case "aktivitas":
+			idx = append(idx, 2)
+		case "komponen":
+			idx = append(idx, 3)
+		}
+	}
+	keyOf := func(k komp) string {
+		parts := make([]string, len(idx))
+		for i, j := range idx {
+			parts[i] = k.names[j]
+		}
+		return strings.Join(parts, "\x00")
+	}
+
+	var out []PivotRow
+	var total PivotRow
+	prev := ""
+	for _, k := range krows {
+		kk := keyOf(k)
+		if kk != prev {
+			var p PivotRow
+			for _, j := range idx {
+				switch j {
+				case 0:
+					p.Kegiatan = k.names[j]
+				case 1:
+					p.SubKeg = k.names[j]
+				case 2:
+					p.Aktivitas = k.names[j]
+				case 3:
+					p.Komponen = k.names[j]
+				}
+			}
+			p.Pagu = k.pagu
+			p.Realisasi = k.real
+			out = append(out, p)
+			prev = kk
+		} else {
+			last := &out[len(out)-1]
+			last.Pagu += k.pagu
+			last.Realisasi += k.real
+		}
+		total.Pagu += k.pagu
+		total.Realisasi += k.real
+	}
+	for i := range out {
+		out[i].Sisa = out[i].Pagu - out[i].Realisasi
+	}
+	total.Sisa = total.Pagu - total.Realisasi
+	return out, total, nil
 }

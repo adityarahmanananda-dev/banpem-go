@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -312,52 +313,67 @@ func (s *Server) buildRekapBelanja(ctx context.Context, b *store.Bantuan, tglCet
 }
 
 // buildRekapRealisasi membuat laporan Rekap Realisasi (pivot) sesuai level
-// yang dipilih (groups).
+// yang dipilih (groups). Gaya tampilan "Compact Form" ala Excel: seluruh level
+// hierarki di satu kolom berindentasi, setiap grup ditutup baris subtotal tebal.
 func (s *Server) buildRekapRealisasi(ctx context.Context, b *store.Bantuan, groups []string, tglCetak time.Time) (export.Report, error) {
 	rows, total, err := s.Store.ListRealisasiPivot(ctx, b.ID, groups)
 	if err != nil {
 		return export.Report{}, err
 	}
-	var cols []export.Col
-	width := map[string]float64{"kegiatan": 30, "sub": 30, "aktivitas": 30, "komponen": 30}
+	var disp []pivotDisplayRow
+	for _, row := range rows {
+		dr := pivotDisplayRow{Pagu: row.Pagu, Realisasi: row.Realisasi, Sisa: row.Sisa}
+		for _, g := range groups {
+			dr.Names = append(dr.Names, pivotName(row, g))
+		}
+		disp = append(disp, dr)
+	}
+	compact := buildPivotCompact(disp)
+
+	var labels []string
 	for _, g := range groups {
-		label := g
 		for _, def := range pivotLevelDefs {
 			if def.Key == g {
-				label = def.Name
+				labels = append(labels, def.Name)
 			}
 		}
-		cols = append(cols, export.Col{Header: label, Width: width[g], ExWidth: 22, Wrap: true, Flex: true})
 	}
-	cols = append(cols,
-		export.Col{Header: "Bruto", Width: 24, ExWidth: 18, Num: true},
-		export.Col{Header: "PPN", Width: 22, ExWidth: 16, Num: true},
-		export.Col{Header: "PPh", Width: 22, ExWidth: 16, Num: true},
-		export.Col{Header: "Netto", Width: 24, ExWidth: 18, Num: true},
-	)
+	cols := []export.Col{
+		{Header: strings.Join(labels, " / "), Width: 130, ExWidth: 46, Wrap: true, Flex: true, Left: true},
+		{Header: "Pagu Anggaran", Width: 24, ExWidth: 18, Num: true, Money: true},
+		{Header: "Nilai Realisasi", Width: 24, ExWidth: 18, Num: true, Money: true},
+		{Header: "Sisa", Width: 24, ExWidth: 18, Num: true, Money: true},
+	}
 	rep := export.Report{
 		Title:      "REKAP REALISASI",
 		Subtitle:   b.Nama,
 		Cols:       cols,
 		Landscape:  true,
-		TotalMerge: len(groups),
+		TotalMerge: 1,
 		Sig:        sigData(b, tglCetak),
 	}
-	for _, row := range rows {
-		cell := make([]any, 0, len(groups)+4)
-		for _, g := range groups {
-			cell = append(cell, pivotName(row, g))
+	for _, r := range compact {
+		cell := []any{indentPivotLabel(r.Label, r.Depth)}
+		rep.RowBold = append(rep.RowBold, r.Kind == "subtotal")
+		if r.Kind == "header" {
+			cell = append(cell, nil, nil, nil)
+			rep.Rows = append(rep.Rows, cell)
+			continue
 		}
-		cell = append(cell, row.Bruto, row.PPN, row.PPH, row.Netto)
+		cell = append(cell, r.Pagu, r.Realisasi, r.Sisa)
 		rep.Rows = append(rep.Rows, cell)
 	}
-	totalRow := make([]any, 0, len(groups)+4)
-	for i := 0; i < len(groups); i++ {
-		totalRow = append(totalRow, "")
-	}
-	totalRow = append(totalRow, total.Bruto, total.PPN, total.PPH, total.Netto)
-	rep.TotalRow = totalRow
+	rep.TotalRow = []any{"TOTAL", total.Pagu, total.Realisasi, total.Sisa}
 	return rep, nil
+}
+
+// indentPivotLabel menjorokkan label hierarki ke kanan sesuai kedalaman level
+// (dipakai pada export berjenjang: 8 spasi per level).
+func indentPivotLabel(label string, depth int) string {
+	if depth <= 0 || label == "" {
+		return label
+	}
+	return strings.Repeat("        ", depth) + label
 }
 
 // buildDaftarTagihan membuat laporan Daftar Tagihan.
@@ -399,6 +415,90 @@ func (s *Server) buildDaftarTagihan(ctx context.Context, b *store.Bantuan, tglCe
 		})
 	}
 	return rep, nil
+}
+
+// buildRABReport membuat laporan Rencana Anggaran Biaya: hierarki
+// Kegiatan->Sub Kegiatan->Aktivitas->Komponen dalam satu kolom berjenjang
+// (indent 3 spasi per level) dengan penomoran I/A/1/a. Sub total ditulis
+// pada baris kepala masing-masing level; baris Kegiatan/Sub Kegiatan/Aktivitas
+// (beserta nilai subtotalnya) dicetak tebal, diakhiri TOTAL.
+func (s *Server) buildRABReport(ctx context.Context, b *store.Bantuan, tglCetak time.Time) (export.Report, error) {
+	tree, err := s.Store.ListKegiatanTree(ctx, b.ID)
+	if err != nil {
+		return export.Report{}, err
+	}
+	cols := []export.Col{
+		{Header: "Uraian", Width: 150, ExWidth: 62, Wrap: true, Flex: true, Left: true},
+		{Header: "Pagu Anggaran (Rp)", Width: 30, ExWidth: 20, Num: true, Money: true},
+	}
+	rep := export.Report{
+		Title:      "RENCANA ANGGARAN BIAYA",
+		Subtitle:   b.Nama,
+		Cols:       cols,
+		TotalMerge: 1,
+		Sig:        sigData(b, tglCetak),
+	}
+	addRow := func(prefix, label string, bold, noBorder bool, pagu int64) {
+		rep.Rows = append(rep.Rows, []any{prefix + label, pagu})
+		rep.RowBold = append(rep.RowBold, bold)
+		rep.RowNoBorder = append(rep.RowNoBorder, noBorder)
+	}
+	var totalPagu int64
+	for ki, k := range tree {
+		totalPagu += k.Pagu
+		addRow("", romanNumeral(ki+1)+". "+strings.ToUpper(k.Nama), true, false, k.Pagu)
+		for si, sk := range k.Subs {
+			addRow("   ", letterUpper(si+1)+". "+strings.ToUpper(sk.Nama), true, false, sk.Pagu)
+			for ai, a := range sk.Aktivitass {
+				addRow("      ", strconv.Itoa(ai+1)+". "+a.Nama, true, false, a.Pagu)
+				for ci, ko := range a.Komponens {
+					addRow("         ", letterLower(ci+1)+". "+ko.Nama, false, true, ko.Pagu)
+				}
+			}
+		}
+	}
+	rep.TotalRow = []any{"TOTAL", totalPagu}
+	return rep, nil
+}
+
+// romanNumeral mengubah angka 1-based menjadi angka Romawi (I, II, III, ...).
+func romanNumeral(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	table := []struct {
+		val int
+		sym string
+	}{
+		{1000, "M"}, {900, "CM"}, {500, "D"}, {400, "CD"},
+		{100, "C"}, {90, "XC"}, {50, "L"}, {40, "XL"},
+		{10, "X"}, {9, "IX"}, {5, "V"}, {4, "IV"}, {1, "I"},
+	}
+	var b strings.Builder
+	for _, t := range table {
+		for n >= t.val {
+			b.WriteString(t.sym)
+			n -= t.val
+		}
+	}
+	return b.String()
+}
+
+// letterUpper mengubah angka 1-based menjadi huruf kapital (A, B, ..., Z).
+// Di luar jangkauan A-Z dikembalikan sebagai angka biasa.
+func letterUpper(n int) string {
+	if n < 1 || n > 26 {
+		return strconv.Itoa(n)
+	}
+	return string(rune('A' + n - 1))
+}
+
+// letterLower mengubah angka 1-based menjadi huruf kecil (a, b, ..., z).
+func letterLower(n int) string {
+	if n < 1 || n > 26 {
+		return strconv.Itoa(n)
+	}
+	return string(rune('a' + n - 1))
 }
 
 // reportFilename menghasilkan nama file export sesuai spesifikasi.

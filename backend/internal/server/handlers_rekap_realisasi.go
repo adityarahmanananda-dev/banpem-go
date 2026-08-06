@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"strings"
 
 	"ebku/internal/store"
 )
@@ -42,11 +43,86 @@ func pivotName(row store.PivotRow, key string) string {
 }
 
 type pivotDisplayRow struct {
-	Names []string
-	Bruto int64
-	PPN   int64
-	PPH   int64
-	Netto int64
+	Names     []string
+	Pagu      int64
+	Realisasi int64
+	Sisa      int64
+}
+
+// pivotCompactRow adalah satu baris tampilan pivot gaya "Compact Form" Excel:
+// seluruh level hierarki dirapikan ke satu kolom berindentasi. Kind:
+// "header" (nama grup, tanpa angka), "leaf" (baris data terkecil), atau
+// "subtotal" (total per grup, tebal).
+type pivotCompactRow struct {
+	Label     string
+	Depth     int
+	Kind      string
+	Pagu      int64
+	Realisasi int64
+	Sisa      int64
+}
+
+// buildPivotCompact mengubah baris hasil agregasi menjadi urutan baris
+// berjenjang: nama grup muncul sekali di atas, anak-anaknya menjorok ke kanan,
+// dan setiap grup ditutup baris subtotal. Baris paling dalam (leaf) membawa angka.
+func buildPivotCompact(rows []pivotDisplayRow) []pivotCompactRow {
+	n := 0
+	if len(rows) > 0 {
+		n = len(rows[0].Names)
+	}
+	if n == 0 {
+		return nil
+	}
+	var out []pivotCompactRow
+	prev := make([]string, n)
+	sum := make([][3]int64, n)
+	for _, r := range rows {
+		lcp := 0
+		for lcp < n && prev[lcp] == r.Names[lcp] {
+			lcp++
+		}
+		for l := n - 1; l >= lcp; l-- {
+			if prev[l] == "" {
+				continue
+			}
+			if l < n-1 {
+				out = append(out, pivotCompactRow{
+					Label: prev[l], Depth: l, Kind: "subtotal",
+					Pagu: sum[l][0], Realisasi: sum[l][1], Sisa: sum[l][2],
+				})
+			}
+			prev[l] = ""
+			sum[l] = [3]int64{}
+		}
+		for j := lcp; j < n; j++ {
+			if j < n-1 {
+				out = append(out, pivotCompactRow{Label: r.Names[j], Depth: j, Kind: "header"})
+			}
+			prev[j] = r.Names[j]
+		}
+		for l := 0; l < n; l++ {
+			sum[l][0] += r.Pagu
+			sum[l][1] += r.Realisasi
+			sum[l][2] += r.Sisa
+		}
+		out = append(out, pivotCompactRow{
+			Label: r.Names[n-1], Depth: n - 1, Kind: "leaf",
+			Pagu: r.Pagu, Realisasi: r.Realisasi, Sisa: r.Sisa,
+		})
+	}
+	for l := n - 1; l >= 0; l-- {
+		if prev[l] == "" {
+			continue
+		}
+		if l < n-1 {
+			out = append(out, pivotCompactRow{
+				Label: prev[l], Depth: l, Kind: "subtotal",
+				Pagu: sum[l][0], Realisasi: sum[l][1], Sisa: sum[l][2],
+			})
+		}
+		prev[l] = ""
+	}
+	return out
 }
 
 func (s *Server) handleRekapRealisasi(w http.ResponseWriter, r *http.Request) {
@@ -83,24 +159,27 @@ func (s *Server) handleRekapRealisasi(w http.ResponseWriter, r *http.Request) {
 	}
 	var disp []pivotDisplayRow
 	for _, row := range rows {
-		dr := pivotDisplayRow{Bruto: row.Bruto, PPN: row.PPN, PPH: row.PPH, Netto: row.Netto}
+		dr := pivotDisplayRow{Pagu: row.Pagu, Realisasi: row.Realisasi, Sisa: row.Sisa}
 		for _, g := range groups {
 			dr.Names = append(dr.Names, pivotName(row, g))
 		}
 		disp = append(disp, dr)
 	}
-	totalDisp := pivotDisplayRow{Bruto: total.Bruto, PPN: total.PPN, PPH: total.PPH, Netto: total.Netto}
+	totalDisp := pivotDisplayRow{Pagu: total.Pagu, Realisasi: total.Realisasi, Sisa: total.Sisa}
 	ft, fm := s.getFlash(w, r)
 	data := struct {
 		baseView
-		Headers []string
-		Rows    []pivotDisplayRow
-		Total   pivotDisplayRow
-		Sel     map[string]bool
+		ColHeader string
+		Compact   []pivotCompactRow
+		Total     pivotDisplayRow
+		Sel       map[string]bool
 	}{
 		baseView: baseView{Title: "Rekap Realisasi", Active: "rekap-realisasi", FlashType: ft, FlashMsg: fm,
 			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
-		Headers: headers, Rows: disp, Total: totalDisp, Sel: sel,
+		ColHeader: strings.Join(headers, " / "),
+		Compact:   buildPivotCompact(disp),
+		Total:     totalDisp,
+		Sel:       sel,
 	}
 	s.render(w, r, "rekap_realisasi.html", data)
 }

@@ -38,33 +38,34 @@
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light">
         <tr>
-          {{range .Headers}}<th>{{.}}</th>{{end}}
-          <th class="text-end">Bruto</th>
-          <th class="text-end">PPN</th>
-          <th class="text-end">PPh</th>
-          <th class="text-end">Netto</th>
+          <th>{{.ColHeader}}</th>
+          <th class="text-center">Pagu Anggaran</th>
+          <th class="text-center">Nilai Realisasi</th>
+          <th class="text-center">Sisa</th>
         </tr>
       </thead>
       <tbody>
-        {{range $row := .Rows}}
-        <tr>
-          {{range $row.Names}}<td>{{.}}</td>{{end}}
-          <td class="text-end">{{fmtMoney $row.Bruto}}</td>
-          <td class="text-end">{{fmtMoney $row.PPN}}</td>
-          <td class="text-end">{{fmtMoney $row.PPH}}</td>
-          <td class="text-end">{{fmtMoney $row.Netto}}</td>
+        {{range .Compact}}
+        <tr {{if eq .Kind "subtotal"}}class="table-light fw-bold"{{end}}>
+          <td style="padding-left:calc({{.Depth}} * 2rem)">{{.Label}}</td>
+          {{if eq .Kind "header"}}
+          <td></td><td></td><td></td>
+          {{else}}
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .Pagu}}</span></div></td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .Realisasi}}</span></div></td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .Sisa}}</span></div></td>
+          {{end}}
         </tr>
         {{else}}
-        <tr><td colspan="8" class="text-center text-muted">Belum ada realisasi.</td></tr>
+        <tr><td colspan="4" class="text-center text-muted">Belum ada realisasi.</td></tr>
         {{end}}
       </tbody>
       <tfoot class="table-light fw-bold">
         <tr>
-          <td colspan="{{len .Headers}}" class="text-end">TOTAL</td>
-          <td class="text-end">{{fmtMoney .Total.Bruto}}</td>
-          <td class="text-end">{{fmtMoney .Total.PPN}}</td>
-          <td class="text-end">{{fmtMoney .Total.PPH}}</td>
-          <td class="text-end">{{fmtMoney .Total.Netto}}</td>
+          <td class="text-end">TOTAL</td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .Total.Pagu}}</span></div></td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .Total.Realisasi}}</span></div></td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .Total.Sisa}}</span></div></td>
         </tr>
       </tfoot>
     </table>

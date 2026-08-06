@@ -341,29 +341,37 @@ func (s *Server) setorFormData(r *http.Request, sid int64, edit bool) (*setorFor
 		IsEdit:  edit,
 		Tanggal: store.TodayString(),
 	}
-	if v.Jenis == "" {
-		v.Jenis = "PPN"
-	}
-	if edit && sid > 0 {
+	if edit && sid > 0 && v.Jenis == "" {
 		var oldJenis string
 		if err := s.Store.Pool.QueryRow(r.Context(), `SELECT jenis_pajak FROM rekap_pajak WHERE setor_ledger_id=$1 AND jenis_pajak<>'' ORDER BY id LIMIT 1`, sid).Scan(&oldJenis); err == nil && oldJenis != "" {
 			v.Jenis = oldJenis
 		}
 	}
-	paid, err := s.Store.ListSetorJenisPerInvoice(r.Context(), id)
+	if v.Jenis == "" {
+		v.Jenis = "PPN"
+	}
+	paid, err := s.Store.ListSetorJenisPerInvoice(r.Context(), id, sid)
 	if err != nil {
 		return nil, err
 	}
 	checked := map[int64]bool{}
 	if edit && sid > 0 {
-		rows, err := s.Store.Pool.Query(r.Context(), `SELECT invoice_id FROM rekap_pajak WHERE setor_ledger_id=$1 AND invoice_id IS NOT NULL`, sid)
+		rows, err := s.Store.Pool.Query(r.Context(), `SELECT invoice_id, ntbn, ntpn FROM rekap_pajak WHERE setor_ledger_id=$1 AND invoice_id IS NOT NULL`, sid)
 		if err != nil {
 			return nil, err
 		}
+		var ntbn, ntpn string
 		for rows.Next() {
 			var iid int64
-			if rows.Scan(&iid) == nil {
+			var n1, n2 string
+			if rows.Scan(&iid, &n1, &n2) == nil {
 				checked[iid] = true
+				if ntbn == "" {
+					ntbn = n1
+				}
+				if ntpn == "" {
+					ntpn = n2
+				}
 			}
 		}
 		rows.Close()
@@ -373,8 +381,16 @@ func (s *Server) setorFormData(r *http.Request, sid int64, edit bool) (*setorFor
 			if le.Tanggal != nil {
 				v.Tanggal = le.Tanggal.Format("2006-01-02")
 			}
-			v.NTBN = extractNoBukti(le.NomorBukti, "NTB")
-			v.NTPN = extractNoBukti(le.NomorBukti, "NTPN")
+			if ntbn != "" {
+				v.NTBN = ntbn
+			} else {
+				v.NTBN = extractNoBukti(le.NomorBukti, "NTB")
+			}
+			if ntpn != "" {
+				v.NTPN = ntpn
+			} else {
+				v.NTPN = extractNoBukti(le.NomorBukti, "NTPN")
+			}
 			if le.Uraian != "" && le.Uraian != "Penyetoran "+v.Jenis {
 				v.Keterangan = le.Uraian
 			}

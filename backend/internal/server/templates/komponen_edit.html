@@ -12,7 +12,10 @@
       </div>
       <div class="col-md-6">
         <label class="form-label">Pagu Anggaran (Rp)</label>
-        <input type="text" class="form-control money-input" name="pagu" value="{{if .K.Pagu}}{{fmtMoneyNoRp .K.Pagu}}{{end}}">
+        <div class="input-group">
+          <span class="input-group-text">Rp.</span>
+          <input type="text" class="form-control money-input text-end" name="pagu" value="{{if .K.Pagu}}{{fmtMoneyNoRp .K.Pagu}}{{end}}">
+        </div>
       </div>
     </div>
   </div>

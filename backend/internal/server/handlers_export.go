@@ -38,7 +38,16 @@ func (s *Server) serveExcel(w http.ResponseWriter, rep export.Report, filename s
 	w.Write(data)
 }
 
-func (s *Server) servePDF(w http.ResponseWriter, rep export.Report, filename string) {
+// servePDF mengirim laporan PDF. Orientasi mengikuti pilihan user pada query
+// string (?orientasi=portrait|landscape); bila tidak ada pilihan, memakai
+// default rep.Landscape.
+func (s *Server) servePDF(w http.ResponseWriter, rep export.Report, filename string, r *http.Request) {
+	switch r.URL.Query().Get("orientasi") {
+	case "portrait":
+		rep.Landscape = false
+	case "landscape":
+		rep.Landscape = true
+	}
 	data, err := export.PDF(rep)
 	if err != nil {
 		log.Println("export pdf:", err)
@@ -89,7 +98,7 @@ func (s *Server) ledgerExport(w http.ResponseWriter, r *http.Request, table, kin
 	case "excel":
 		s.serveExcel(w, rep, fname)
 	case "pdf":
-		s.servePDF(w, rep, fname)
+		s.servePDF(w, rep, fname, r)
 	case "word":
 		s.serveWord(w, rep, fname, r.URL.Query().Get("orientasi") == "portrait")
 	}
@@ -147,7 +156,7 @@ func (s *Server) rekapPajakExport(w http.ResponseWriter, r *http.Request, kind s
 	case "excel":
 		s.serveExcel(w, rep, fname)
 	case "pdf":
-		s.servePDF(w, rep, fname)
+		s.servePDF(w, rep, fname, r)
 	case "word":
 		s.serveWord(w, rep, fname, r.URL.Query().Get("orientasi") == "portrait")
 	}
@@ -180,7 +189,7 @@ func (s *Server) rekapBelanjaExport(w http.ResponseWriter, r *http.Request, kind
 	fname := reportFilename("RekapBelanja", b.Nama, tgl)
 	switch kind {
 	case "pdf":
-		s.servePDF(w, rep, fname)
+		s.servePDF(w, rep, fname, r)
 	case "word":
 		s.serveWord(w, rep, fname, r.URL.Query().Get("orientasi") == "portrait")
 	}
@@ -221,7 +230,46 @@ func (s *Server) daftarTagihanExport(w http.ResponseWriter, r *http.Request, kin
 	fname := reportFilename("DaftarTagihan", b.Nama, tgl)
 	switch kind {
 	case "pdf":
-		s.servePDF(w, rep, fname)
+		s.servePDF(w, rep, fname, r)
+	case "word":
+		s.serveWord(w, rep, fname, r.URL.Query().Get("orientasi") == "portrait")
+	}
+}
+
+func (s *Server) handleRABExportExcel(w http.ResponseWriter, r *http.Request) {
+	s.rabExport(w, r, "excel")
+}
+func (s *Server) handleRABExportPDF(w http.ResponseWriter, r *http.Request) {
+	s.rabExport(w, r, "pdf")
+}
+func (s *Server) handleRABExportWord(w http.ResponseWriter, r *http.Request) {
+	s.rabExport(w, r, "word")
+}
+
+// rabExport mengekspor laporan Rencana Anggaran Biaya.
+func (s *Server) rabExport(w http.ResponseWriter, r *http.Request, kind string) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	b, err := s.Store.GetBantuan(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	tgl, _, _ := exportParams(r)
+	rep, err := s.buildRABReport(r.Context(), &b, tgl)
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	fname := reportFilename("RAB", b.Nama, tgl)
+	switch kind {
+	case "excel":
+		s.serveExcel(w, rep, fname)
+	case "pdf":
+		s.servePDF(w, rep, fname, r)
 	case "word":
 		s.serveWord(w, rep, fname, r.URL.Query().Get("orientasi") == "portrait")
 	}

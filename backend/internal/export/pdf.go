@@ -93,23 +93,29 @@ func (r *pdfRender) render(rep Report) error {
 	// Judul (hanya halaman pertama): baris 1 = judul (bold), baris 2 = nama hibah.
 	r.font("B", titleSize)
 	p.CellFormat(0, lineH(titleSize), strings.ToUpper(rep.Title), "", 2, "C", false, 0, "")
+	// Sub judul boleh membungkus bila namanya panjang agar tidak terpotong.
 	r.font("", subSize)
-	p.CellFormat(0, lineH(subSize), rep.Subtitle, "", 2, "C", false, 0, "")
+	subLines := r.wrapText(rep.Subtitle, r.usable-2*pdfLeft)
+	for _, ln := range subLines {
+		p.CellFormat(0, lineH(subSize), ln, "", 2, "C", false, 0, "")
+	}
 	p.Ln(3)
 
 	widths := r.computeWidths(rep, r.usable)
 
 	r.drawHeader(widths, rep)
-	for _, row := range rep.Rows {
-		rh := r.rowHeight(row, rep.Cols, widths)
+	for i, row := range rep.Rows {
+		bold := i < len(rep.RowBold) && rep.RowBold[i]
+		noBorder := i < len(rep.RowNoBorder) && rep.RowNoBorder[i]
+		rh := r.rowHeight(row, rep.Cols, widths, bold)
 		if p.GetY()+rh > r.pageH-pdfBot {
 			p.AddPage()
 			r.drawHeader(widths, rep)
 		}
-		r.drawRow(row, rep.Cols, widths, rh)
+		r.drawRow(row, rep.Cols, widths, rh, bold, noBorder)
 	}
 	if rep.TotalRow != nil {
-		rh := r.rowHeight(rep.TotalRow, rep.Cols, widths)
+		rh := r.rowHeight(rep.TotalRow, rep.Cols, widths, true)
 		if p.GetY()+rh > r.pageH-pdfBot {
 			p.AddPage()
 			r.drawHeader(widths, rep)
@@ -135,17 +141,34 @@ func (r *pdfRender) computeWidths(rep Report, usable float64) []float64 {
 			ws[i] = w
 		}
 		r.font("", bodySize)
-		for _, row := range rep.Rows {
-			if i < len(row) && row[i] != nil {
-				if w := r.p.GetStringWidth(r.cellText(row[i], col)) + 2*cellPadX; w > ws[i] {
-					ws[i] = w
-				}
+		for ri, row := range rep.Rows {
+			if i >= len(row) || row[i] == nil {
+				continue
 			}
-		}
-		if rep.TotalRow != nil && i < len(rep.TotalRow) && rep.TotalRow[i] != nil {
-			if w := r.p.GetStringWidth(r.cellText(rep.TotalRow[i], col)) + 2*cellPadX; w > ws[i] {
+			style := ""
+			if ri < len(rep.RowBold) && rep.RowBold[ri] {
+				style = "B"
+			}
+			r.font(style, bodySize)
+			w := r.p.GetStringWidth(r.cellText(row[i], col)) + 2*cellPadX
+			if col.Money {
+				w += r.p.GetStringWidth("Rp.") + 2
+			}
+			if w > ws[i] {
 				ws[i] = w
 			}
+		}
+		r.font("", bodySize)
+		if rep.TotalRow != nil && i < len(rep.TotalRow) && rep.TotalRow[i] != nil {
+			r.font("B", bodySize)
+			w := r.p.GetStringWidth(r.cellText(rep.TotalRow[i], col)) + 2*cellPadX
+			if col.Money {
+				w += r.p.GetStringWidth("Rp.") + 2
+			}
+			if w > ws[i] {
+				ws[i] = w
+			}
+			r.font("", bodySize)
 		}
 		if !col.Flex {
 			fixed += ws[i]
@@ -229,6 +252,8 @@ func (r *pdfRender) cellAlign(col Col, i int) string {
 	switch {
 	case col.Num:
 		return "R"
+	case col.Left:
+		return "L"
 	case col.Center || i == 0:
 		return "C"
 	default:
@@ -238,7 +263,8 @@ func (r *pdfRender) cellAlign(col Col, i int) string {
 
 // wrapText memecah teks menjadi baris-baris yang muat di usable: word wrapping
 // biasa + break-word untuk string panjang tanpa spasi. TIDAK mengecilkan font,
-// TIDAK ellipsis. Font aktif dipakai untuk pengukuran lebar.
+// TIDAK ellipsis. Indentasi (spasi di awal baris) dipertahankan pada setiap
+// baris hasil wrap agar hierarki berjenjang tetap terlihat.
 func (r *pdfRender) wrapText(text string, usable float64) []string {
 	if text == "" {
 		return nil
@@ -249,12 +275,18 @@ func (r *pdfRender) wrapText(text string, usable float64) []string {
 	}
 	var out []string
 	for _, para := range strings.Split(text, "\n") {
-		if strings.TrimSpace(para) == "" {
-			out = append(out, "")
+		indent := ""
+		rest := para
+		for len(rest) > 0 && (rest[0] == ' ' || rest[0] == '\t') {
+			indent += string(rest[0])
+			rest = rest[1:]
+		}
+		if rest == "" {
+			out = append(out, indent)
 			continue
 		}
-		words := strings.Fields(para)
-		line := ""
+		words := strings.Fields(rest)
+		line := indent
 		for _, w := range words {
 			// Break kata panjang (tanpa spasi) per karakter.
 			for r.p.GetStringWidth(w) > usable {
@@ -265,20 +297,22 @@ func (r *pdfRender) wrapText(text string, usable float64) []string {
 				if cut == 0 {
 					cut = 1
 				}
-				if line != "" {
+				if line != indent {
 					out = append(out, line)
-					line = ""
 				}
-				out = append(out, w[:cut])
+				out = append(out, indent+w[:cut])
+				line = indent
 				w = w[cut:]
 			}
 			test := w
-			if line != "" {
+			if line != indent {
 				test = line + " " + w
+			} else {
+				test = indent + w
 			}
-			if r.p.GetStringWidth(test) > usable && line != "" {
+			if r.p.GetStringWidth(test) > usable && line != indent {
 				out = append(out, line)
-				line = w
+				line = indent + w
 			} else {
 				line = test
 			}
@@ -337,16 +371,26 @@ func (r *pdfRender) cellText(cell any, col Col) string {
 	return CellText(cell)
 }
 
-func (r *pdfRender) rowHeight(row []any, cols []Col, ws []float64) float64 {
+func (r *pdfRender) rowHeight(row []any, cols []Col, ws []float64, bold bool) float64 {
 	max := minRowH
-	r.font("", bodySize)
+	style := ""
+	if bold {
+		style = "B"
+	}
+	r.font(style, bodySize)
 	lh := lineH(bodySize)
 	for i, cell := range row {
 		if cell == nil {
 			continue
 		}
+		col := cols[i]
+		if col.Money {
+			if _, ok := cell.(int64); ok {
+				continue // cell uang selalu satu baris
+			}
+		}
 		usable := ws[i] - 2*cellPadX
-		lines := r.wrapText(r.cellText(cell, cols[i]), usable)
+		lines := r.wrapText(r.cellText(cell, col), usable)
 		if len(lines) == 0 {
 			continue
 		}
@@ -358,21 +402,36 @@ func (r *pdfRender) rowHeight(row []any, cols []Col, ws []float64) float64 {
 	return max
 }
 
-func (r *pdfRender) drawRow(row []any, cols []Col, ws []float64, rh float64) {
+func (r *pdfRender) drawRow(row []any, cols []Col, ws []float64, rh float64, bold bool, noBorder bool) {
 	p := r.p
 	y := p.GetY()
 	x := pdfLeft
 	for i, cell := range row {
-		p.Rect(x, y, ws[i], rh, "D")
-		r.drawCell(cell, cols[i], i, x, y, ws[i], rh)
+		if noBorder {
+			// hanya garis vertikal kiri & kanan agar tabel tetap menyambung
+			// (tanpa garis atas/bawah antar baris komponen).
+			p.Line(x, y, x, y+rh)
+			if i == len(row)-1 {
+				p.Line(x+ws[i], y, x+ws[i], y+rh)
+			}
+		} else {
+			p.Rect(x, y, ws[i], rh, "D")
+		}
+		r.drawCell(cell, cols[i], i, x, y, ws[i], rh, bold)
 		x += ws[i]
 	}
 	p.SetY(y + rh)
 }
 
-func (r *pdfRender) drawCell(cell any, col Col, i int, x, y, w, rh float64) {
+func (r *pdfRender) drawCell(cell any, col Col, i int, x, y, w, rh float64, bold bool) {
 	if cell == nil {
 		return
+	}
+	if col.Money {
+		if n, ok := cell.(int64); ok {
+			r.drawMoney(n, bold, x, y, w, rh)
+			return
+		}
 	}
 	text := r.cellText(cell, col)
 	if text == "" {
@@ -380,7 +439,11 @@ func (r *pdfRender) drawCell(cell any, col Col, i int, x, y, w, rh float64) {
 	}
 	usable := w - 2*cellPadX
 	align := r.cellAlign(col, i)
-	r.font("", bodySize)
+	style := ""
+	if bold {
+		style = "B"
+	}
+	r.font(style, bodySize)
 	lh := lineH(bodySize)
 	ly := y + cellPadY
 	for _, ln := range r.wrapText(text, usable) {
@@ -389,6 +452,32 @@ func (r *pdfRender) drawCell(cell any, col Col, i int, x, y, w, rh float64) {
 		p.CellFormat(usable, lh, ln, "", 0, align, false, 0, "")
 		ly += lh
 	}
+}
+
+// drawMoney menggambar cell uang gaya pembukuan: "Rp." di kiri dan angka
+// menempel di kanan cell. Bila kolom terlalu sempit untuk keduanya, angka
+// ditulis menyatu dengan "Rp." rata kiri agar tidak terpotong/tumpang tindih.
+func (r *pdfRender) drawMoney(n int64, bold bool, x, y, w, rh float64) {
+	style := ""
+	if bold {
+		style = "B"
+	}
+	r.font(style, bodySize)
+	lh := lineH(bodySize)
+	ly := y + (rh-lh)/2
+	amount := pdfAmount(n)
+	usable := w - 2*cellPadX
+	rpWidth := r.p.GetStringWidth("Rp.") + 2
+	aw := r.p.GetStringWidth(amount)
+	if rpWidth+aw > usable {
+		r.p.SetXY(x+cellPadX, ly)
+		r.p.CellFormat(usable, lh, "Rp. "+amount, "", 0, "L", false, 0, "")
+		return
+	}
+	r.p.SetXY(x+cellPadX, ly)
+	r.p.CellFormat(rpWidth, lh, "Rp.", "", 0, "L", false, 0, "")
+	r.p.SetXY(x+w-cellPadX-aw, ly)
+	r.p.CellFormat(aw, lh, amount, "", 0, "L", false, 0, "")
 }
 
 func (r *pdfRender) drawTotal(row []any, cols []Col, ws []float64, rh float64, merge int) {
@@ -423,6 +512,13 @@ func (r *pdfRender) drawTotal(row []any, cols []Col, ws []float64, rh float64, m
 	for ; i < len(row); i++ {
 		cell := row[i]
 		p.Rect(x, y, ws[i], rh, "D")
+		if cols[i].Money {
+			if n, ok := cell.(int64); ok {
+				r.drawMoney(n, true, x, y, ws[i], rh)
+				x += ws[i]
+				continue
+			}
+		}
 		text := r.cellText(cell, cols[i])
 		if text != "" {
 			usable := ws[i] - 2*cellPadX

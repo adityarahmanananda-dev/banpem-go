@@ -102,6 +102,16 @@
     updateSetorTotal();
   }
 
+  // ---- Setor pajak: ganti jenis pajak -> reload form dengan filter invoice ----
+  var jenisPajakEl = document.getElementById("jenisPajak");
+  if (jenisPajakEl) {
+    jenisPajakEl.addEventListener("change", function () {
+      var url = new URL(window.location.href);
+      url.searchParams.set("jenis", jenisPajakEl.value);
+      window.location.href = url.toString();
+    });
+  }
+
   // ---- Form tagihan: preview pajak ----
   function moneyDisp(v) {
     return rupiahFromSen(Number(v || 0));
@@ -323,4 +333,48 @@
       initRealisasiRow(tpl);
     });
   }
+
+  // ---- Komponen (Data Kegiatan): input beberapa baris sekaligus ----
+  function komponenRowHTML() {
+    return '<div class="komponen-row row g-2">' +
+      '<div class="col-12 col-md-6">' +
+        '<input type="text" class="form-control form-control-sm" name="nama" placeholder="Nama komponen">' +
+      '</div>' +
+      '<div class="col-8 col-md-4">' +
+        '<div class="input-group input-group-sm">' +
+          '<span class="input-group-text">Rp.</span>' +
+          '<input type="text" class="form-control money-input text-end" name="pagu" placeholder="0">' +
+        '</div>' +
+      '</div>' +
+      '<div class="col-4 col-md-2 d-grid">' +
+        '<button type="button" class="btn btn-outline-danger btn-sm komponen-hapus"><i class="bi bi-x-lg"></i></button>' +
+      '</div>' +
+    '</div>';
+  }
+  document.addEventListener("click", function (e) {
+    if (!(e.target instanceof Element)) return;
+    var addBtn = e.target.closest(".tambah-komponen");
+    if (addBtn) {
+      e.preventDefault();
+      var container = addBtn.closest("form").querySelector(".komponen-rows");
+      if (!container) return;
+      container.insertAdjacentHTML("beforeend", komponenRowHTML());
+      var inp = container.lastElementChild.querySelector(".money-input");
+      if (inp) {
+        inp.addEventListener("input", function () {
+          var d = digitsOnly(inp.value);
+          inp.value = formatThousands(d);
+        });
+      }
+      return;
+    }
+    var delBtn = e.target.closest(".komponen-hapus");
+    if (delBtn) {
+      e.preventDefault();
+      var container = delBtn.closest(".komponen-rows");
+      if (container && container.querySelectorAll(".komponen-row").length > 1) {
+        delBtn.closest(".komponen-row").remove();
+      }
+    }
+  });
 })();

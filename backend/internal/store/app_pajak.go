@@ -29,6 +29,19 @@ func TaxValueForJenis(inv Invoice, jenis string) int64 {
 	return 0
 }
 
+// nomorBuktiSetor merangkai nomor bukti setor dari NTB dan NTPN. Keduanya
+// disimpan bila diisi, agar tidak hilang saat entri diedit ulang.
+func nomorBuktiSetor(ntbn, ntpn string) string {
+	parts := []string{}
+	if ntbn != "" {
+		parts = append(parts, "NTB="+ntbn)
+	}
+	if ntpn != "" {
+		parts = append(parts, "NTPN="+ntpn)
+	}
+	return strings.Join(parts, "\n")
+}
+
 // InferJenisPajak menyimpulkan jenis pajak dari uraian entri setor.
 func InferJenisPajak(uraian string) string {
 	u := strings.ToUpper(uraian)
@@ -74,12 +87,7 @@ func (s *Store) CreateSetorPajak(ctx context.Context, in SetorInput) error {
 		if uraian == "" {
 			uraian = "Penyetoran " + in.JenisPajak
 		}
-		nomorBukti := ""
-		if in.NTPN != "" {
-			nomorBukti = "NTPN=\n" + in.NTPN
-		} else if in.NTBN != "" {
-			nomorBukti = "NTB=\n" + in.NTBN
-		}
+		nomorBukti := nomorBuktiSetor(in.NTBN, in.NTPN)
 		tgl := in.Tanggal
 		ledgerID, err := AppendBKULedger(ctx, tx, LedgerEntry{
 			BantuanID: in.BantuanID, Tanggal: &tgl, NomorBukti: nomorBukti, Uraian: uraian,
@@ -124,10 +132,6 @@ func (s *Store) UpdateSetorPajak(ctx context.Context, setorID int64, in SetorInp
 			return err
 		}
 		oldJenis := in.JenisPajak
-		var j string
-		if err := tx.QueryRow(ctx, `SELECT jenis_pajak FROM rekap_pajak WHERE setor_ledger_id=$1 AND jenis_pajak<>'' ORDER BY id LIMIT 1`, setorID).Scan(&j); err == nil && j != "" {
-			oldJenis = j
-		}
 		var nominal int64
 		for _, iid := range in.InvoiceIDs {
 			inv, err := getInvoiceQ(ctx, tx, iid)
@@ -143,12 +147,7 @@ func (s *Store) UpdateSetorPajak(ctx context.Context, setorID int64, in SetorInp
 		if uraian == "" {
 			uraian = "Penyetoran " + oldJenis
 		}
-		nomorBukti := ""
-		if in.NTPN != "" {
-			nomorBukti = "NTPN=\n" + in.NTPN
-		} else if in.NTBN != "" {
-			nomorBukti = "NTB=\n" + in.NTBN
-		}
+		nomorBukti := nomorBuktiSetor(in.NTBN, in.NTPN)
 		tgl := in.Tanggal
 		if _, err := tx.Exec(ctx, `UPDATE trx_ledger SET tanggal=$1, nomor_bukti=$2, uraian=$3, debit=$4, kredit=0 WHERE id=$5`,
 			tgl, nomorBukti, uraian, nominal, setorID); err != nil {
@@ -212,11 +211,14 @@ func (s *Store) DeleteSetorPajak(ctx context.Context, setorID int64) error {
 }
 
 // ListSetorJenisPerInvoice mengembalikan peta invoice_id -> daftar jenis pajak
-// yang sudah disetor (untuk deteksi "sudah disetor" di form setor).
-func (s *Store) ListSetorJenisPerInvoice(ctx context.Context, bantuanID int64) (map[int64][]string, error) {
+// yang sudah disetor (untuk deteksi "sudah disetor" di form setor). Jika
+// excludeSetorID > 0, entri setor tersebut dikecualikan (dipakai saat edit agar
+// tagihan milik setor yang sedang diedit tidak ikut di-disable).
+func (s *Store) ListSetorJenisPerInvoice(ctx context.Context, bantuanID, excludeSetorID int64) (map[int64][]string, error) {
 	rows, err := s.Pool.Query(ctx, `SELECT rp.invoice_id, l.uraian
 		FROM rekap_pajak rp JOIN trx_ledger l ON l.id = rp.setor_ledger_id
-		WHERE rp.bantuan_id=$1 AND rp.invoice_id IS NOT NULL AND rp.setor_ledger_id IS NOT NULL`, bantuanID)
+		WHERE rp.bantuan_id=$1 AND rp.invoice_id IS NOT NULL AND rp.setor_ledger_id IS NOT NULL
+		  AND ($2 = 0 OR rp.setor_ledger_id <> $2)`, bantuanID, excludeSetorID)
 	if err != nil {
 		return nil, err
 	}
