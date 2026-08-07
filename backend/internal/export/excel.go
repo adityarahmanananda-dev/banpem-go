@@ -70,6 +70,10 @@ func ExcelBytes(r Report) ([]byte, error) {
 	idx, _ := f.GetSheetIndex(sheet)
 	f.SetActiveSheet(idx)
 
+	if err := f.SetDefaultFont("Arimo"); err != nil {
+		return nil, err
+	}
+
 	n := len(r.Cols)
 
 	titleStyle, err := mustStyle(f, &excelize.Style{

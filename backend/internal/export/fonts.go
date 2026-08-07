@@ -3,15 +3,15 @@ package export
 import "embed"
 
 //go:embed fonts/*
+//go:embed Arimo/static/*
 var fontsFS embed.FS
 
-// pdfFont mengembalikan isi file font serif (Liberation Serif, setara Times
-// New Roman) yang diminta ("" untuk regular, "B" untuk bold). nil bila font
-// tidak tersedia.
+// pdfFont mengembalikan isi file font Arimo (reguler / bold). Arimo adalah
+// font sans-serif (mirip Arial). nil bila font tidak tersedia.
 func pdfFont(style string) []byte {
-	name := "fonts/LiberationSerif.ttf"
+	name := "Arimo/static/Arimo-Regular.ttf"
 	if style == "B" {
-		name = "fonts/LiberationSerif-Bold.ttf"
+		name = "Arimo/static/Arimo-Bold.ttf"
 	}
 	b, err := fontsFS.ReadFile(name)
 	if err != nil {

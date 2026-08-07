@@ -74,15 +74,15 @@ func (r *pdfRender) addFonts() error {
 	reg := pdfFont("")
 	bold := pdfFont("B")
 	if reg == nil || bold == nil {
-		return fmt.Errorf("font serif tidak tersedia")
+		return fmt.Errorf("font Arimo tidak tersedia")
 	}
-	r.p.AddUTF8FontFromBytes("Serif", "", reg)
-	r.p.AddUTF8FontFromBytes("Serif", "B", bold)
+	r.p.AddUTF8FontFromBytes("Arimo", "", reg)
+	r.p.AddUTF8FontFromBytes("Arimo", "B", bold)
 	return nil
 }
 
 func (r *pdfRender) font(style string, size float64) {
-	r.p.SetFont("Serif", style, size)
+	r.p.SetFont("Arimo", style, size)
 }
 
 func (r *pdfRender) render(rep Report) error {

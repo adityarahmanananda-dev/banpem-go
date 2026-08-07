@@ -1,17 +1,20 @@
 {{define "content"}}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0"><i class="bi bi-diagram-3"></i> Rencana Anggaran Biaya</h4>
-  <div class="dropdown">
-    <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Export</button>
-    <ul class="dropdown-menu">
-      <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/rab/export/excel">Excel</a></li>
-      <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/rab/export/pdf">PDF</a></li>
-      <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/rab/export/word">Word</a></li>
-    </ul>
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="toggleEdit"><i class="bi bi-pencil"></i> Edit</button>
+    <div class="dropdown">
+      <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Export</button>
+      <ul class="dropdown-menu">
+        <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/rab/export/excel">Excel</a></li>
+        <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/rab/export/pdf">PDF</a></li>
+        <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/rab/export/word">Word</a></li>
+      </ul>
+    </div>
   </div>
 </div>
 
-<div class="card mb-3">
+<div class="card mb-3 edit-actions d-none">
   <div class="card-header fw-bold">Tambah Kegiatan</div>
   <div class="card-body">
     <form method="post" action="/bantuan/{{.Bantuan.ID}}/kegiatan/tambah" class="d-flex gap-2">
@@ -28,12 +31,14 @@
       <b>{{.Nama}}</b>
       <span class="badge bg-light text-dark ms-2">Sub Total: {{fmtMoney .Pagu}}</span>
     </div>
-    <form method="post" action="/bantuan/{{$.Bantuan.ID}}/kegiatan/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus kegiatan beserta sub kegiatan, aktivitas & komponennya?');">
-      <button class="btn btn-outline-light btn-sm"><i class="bi bi-trash"></i></button>
-    </form>
+    <span class="edit-actions d-none">
+      <form method="post" action="/bantuan/{{$.Bantuan.ID}}/kegiatan/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus kegiatan beserta sub kegiatan, aktivitas & komponennya?');">
+        <button class="btn btn-outline-light btn-sm"><i class="bi bi-trash"></i></button>
+      </form>
+    </span>
   </div>
   <div class="card-body">
-    <form method="post" action="/bantuan/{{$.Bantuan.ID}}/sub-kegiatan/tambah" class="d-flex gap-2 mb-3">
+    <form method="post" action="/bantuan/{{$.Bantuan.ID}}/sub-kegiatan/tambah" class="d-flex gap-2 mb-3 edit-actions d-none">
       <input type="hidden" name="kegiatan_id" value="{{.ID}}">
       <input type="text" class="form-control" name="nama" placeholder="Nama sub kegiatan" required>
       <button class="btn btn-outline-primary btn-sm text-nowrap"><i class="bi bi-plus-lg"></i> Sub Kegiatan</button>
@@ -42,11 +47,13 @@
     <div class="border rounded p-2 mb-2 {{subColor $j}}">
       <div class="d-flex justify-content-between align-items-center">
         <b class="ms-1">{{.Nama}} <span class="badge bg-white text-dark ms-1">Sub Total: {{fmtMoney .Pagu}}</span></b>
-        <form method="post" action="/bantuan/{{$.Bantuan.ID}}/sub-kegiatan/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus sub kegiatan beserta aktivitas & komponennya?');">
-          <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
-        </form>
+        <span class="edit-actions d-none">
+          <form method="post" action="/bantuan/{{$.Bantuan.ID}}/sub-kegiatan/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus sub kegiatan beserta aktivitas & komponennya?');">
+            <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+          </form>
+        </span>
       </div>
-      <form method="post" action="/bantuan/{{$.Bantuan.ID}}/aktivitas/tambah" class="d-flex gap-2 mt-2 mb-2">
+      <form method="post" action="/bantuan/{{$.Bantuan.ID}}/aktivitas/tambah" class="d-flex gap-2 mt-2 mb-2 edit-actions d-none">
         <input type="hidden" name="sub_kegiatan_id" value="{{.ID}}">
         <input type="text" class="form-control form-control-sm" name="nama" placeholder="Nama aktivitas" required>
         <button class="btn btn-outline-secondary btn-sm text-nowrap"><i class="bi bi-plus-lg"></i> Aktivitas</button>
@@ -55,9 +62,11 @@
       <div class="border rounded p-2 mb-2 bg-white">
         <div class="d-flex justify-content-between align-items-center">
           <b class="ms-1">{{.Nama}} <span class="badge bg-light text-dark ms-1">Sub Total: {{fmtMoney .Pagu}}</span></b>
-          <form method="post" action="/bantuan/{{$.Bantuan.ID}}/aktivitas/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus aktivitas beserta komponennya?');">
-            <button class="btn btn-outline-danger btn-sm"><i class="bi bi-x"></i></button>
-          </form>
+          <span class="edit-actions d-none">
+            <form method="post" action="/bantuan/{{$.Bantuan.ID}}/aktivitas/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus aktivitas beserta komponennya?');">
+              <button class="btn btn-outline-danger btn-sm"><i class="bi bi-x"></i></button>
+            </form>
+          </span>
         </div>
         <div class="table-responsive mt-2">
           <table class="table table-sm table-bordered table-hover bg-white align-middle mb-0">
@@ -65,7 +74,7 @@
               <tr>
                 <th>Komponen</th>
                 <th class="text-end" style="width:200px">Pagu Anggaran (Rp)</th>
-                <th class="text-end" style="width:140px">Aksi</th>
+                <th class="text-end edit-actions d-none" style="width:140px">Aksi</th>
               </tr>
             </thead>
             <tbody>
@@ -73,7 +82,7 @@
               <tr>
                 <td>{{.Nama}}</td>
                 <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .Pagu}}</span></div></td>
-                <td class="text-end text-nowrap">
+                <td class="text-end text-nowrap edit-actions d-none">
                   <a href="/bantuan/{{$.Bantuan.ID}}/komponen/edit/{{.ID}}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i></a>
                   <form method="post" action="/bantuan/{{$.Bantuan.ID}}/komponen/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus komponen ini?');">
                     <button class="btn btn-outline-danger btn-sm"><i class="bi bi-x"></i></button>
@@ -86,7 +95,7 @@
             </tbody>
           </table>
         </div>
-        <form method="post" action="/bantuan/{{$.Bantuan.ID}}/komponen/tambah" class="mt-2">
+        <form method="post" action="/bantuan/{{$.Bantuan.ID}}/komponen/tambah" class="mt-2 edit-actions d-none">
           <input type="hidden" name="aktivitas_id" value="{{.ID}}">
           <div class="komponen-rows">
             <div class="komponen-row row g-2">

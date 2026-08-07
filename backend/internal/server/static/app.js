@@ -334,6 +334,20 @@
     });
   }
 
+  // ---- RAB: tombol Edit menampilkan/menyembunyikan aksi edit tiap baris ----
+  var toggleEditBtn = document.getElementById("toggleEdit");
+  if (toggleEditBtn) {
+    toggleEditBtn.addEventListener("click", function () {
+      var show = toggleEditBtn.classList.toggle("active");
+      document.querySelectorAll(".edit-actions").forEach(function (el) {
+        el.classList.toggle("d-none", !show);
+      });
+      toggleEditBtn.innerHTML = show
+        ? '<i class="bi bi-check-lg"></i> Selesai'
+        : '<i class="bi bi-pencil"></i> Edit';
+    });
+  }
+
   // ---- Komponen (Data Kegiatan): input beberapa baris sekaligus ----
   function komponenRowHTML() {
     return '<div class="komponen-row row g-2">' +
