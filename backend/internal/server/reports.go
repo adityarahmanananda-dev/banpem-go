@@ -328,7 +328,7 @@ func (s *Server) buildRekapRealisasi(ctx context.Context, b *store.Bantuan, grou
 		}
 		disp = append(disp, dr)
 	}
-	compact := buildPivotCompact(disp)
+	compact := mergeSubtotalsToHeaders(styleRABCompact(buildPivotCompact(disp), groups))
 
 	var labels []string
 	for _, g := range groups {
@@ -353,15 +353,10 @@ func (s *Server) buildRekapRealisasi(ctx context.Context, b *store.Bantuan, grou
 		Sig:        sigData(b, tglCetak),
 	}
 	for _, r := range compact {
-		cell := []any{indentPivotLabel(r.Label, r.Depth)}
-		rep.RowBold = append(rep.RowBold, r.Kind == "subtotal")
-		if r.Kind == "header" {
-			cell = append(cell, nil, nil, nil)
-			rep.Rows = append(rep.Rows, cell)
-			continue
-		}
-		cell = append(cell, r.Pagu, r.Realisasi, r.Sisa)
-		rep.Rows = append(rep.Rows, cell)
+		rep.Rows = append(rep.Rows, []any{
+			indentPivotLabel(r.Label, r.Depth), r.Pagu, r.Realisasi, r.Sisa,
+		})
+		rep.RowBold = append(rep.RowBold, r.Bold)
 	}
 	rep.TotalRow = []any{"TOTAL", total.Pagu, total.Realisasi, total.Sisa}
 	return rep, nil
@@ -499,6 +494,41 @@ func letterLower(n int) string {
 		return strconv.Itoa(n)
 	}
 	return string(rune('a' + n - 1))
+}
+
+// buildRekapPenggunaanDana membuat laporan Rekapitulasi Penggunaan Dana:
+// per tagihan ditampilkan No. Bukti, tanggal bukti, keperluan (uraian) dan
+// nominal, dengan baris TOTAL dan tanda tangan. Kolom No. Bukti & Tanggal
+// berada di bawah grup header "Kuitansi".
+func (s *Server) buildRekapPenggunaanDana(ctx context.Context, b *store.Bantuan, tglCetak time.Time) (export.Report, error) {
+	invoices, err := s.Store.ListInvoices(ctx, b.ID, "sort")
+	if err != nil {
+		return export.Report{}, err
+	}
+	cols := []export.Col{
+		{Header: "No", Width: 8.7, ExWidth: 6, Center: true},
+		{Header: "No. Bukti Dokumen", Width: 32, ExWidth: 15, Wrap: true, MaxWidth: 32},
+		{Header: "Tanggal Bukti Dokumen", Width: 26, ExWidth: 14, Center: true, MaxWidth: 26},
+		{Header: "Keperluan Pembayaran", Width: 120, ExWidth: 55, Wrap: true, Flex: true, Left: true},
+		{Header: "Nominal", Width: 26, ExWidth: 18, Num: true, Money: true},
+	}
+	rep := export.Report{
+		Title:      "REKAPITULASI PENGGUNAAN DANA",
+		Subtitle:   b.Nama,
+		Cols:       cols,
+		ColGroups:  []export.ColGroup{{Header: "KUITANSI", Start: 1, Span: 2}},
+		TotalMerge: 4,
+		Sig:        sigData(b, tglCetak),
+	}
+	var total int64
+	for i, inv := range invoices {
+		rep.Rows = append(rep.Rows, []any{
+			i + 1, inv.NomorBukti, tanggalID(inv.Tanggal), inv.Uraian, inv.Bruto,
+		})
+		total += inv.Bruto
+	}
+	rep.TotalRow = []any{"TOTAL", "", "", "", total}
+	return rep, nil
 }
 
 // reportFilename menghasilkan nama file export sesuai spesifikasi.

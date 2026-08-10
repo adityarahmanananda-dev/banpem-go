@@ -137,9 +137,7 @@ func (r *pdfRender) computeWidths(rep Report, usable float64) []float64 {
 	for i, col := range rep.Cols {
 		ws[i] = col.Width // deklarasi sebagai minimum
 		r.font("B", headSize)
-		if w := r.p.GetStringWidth(col.Header) + 2*cellPadX; w > ws[i] {
-			ws[i] = w
-		}
+		cw := r.p.GetStringWidth(col.Header) + 2*cellPadX
 		r.font("", bodySize)
 		for ri, row := range rep.Rows {
 			if i >= len(row) || row[i] == nil {
@@ -154,8 +152,8 @@ func (r *pdfRender) computeWidths(rep Report, usable float64) []float64 {
 			if col.Money {
 				w += r.p.GetStringWidth("Rp.") + 2
 			}
-			if w > ws[i] {
-				ws[i] = w
+			if w > cw {
+				cw = w
 			}
 		}
 		r.font("", bodySize)
@@ -165,10 +163,16 @@ func (r *pdfRender) computeWidths(rep Report, usable float64) []float64 {
 			if col.Money {
 				w += r.p.GetStringWidth("Rp.") + 2
 			}
-			if w > ws[i] {
-				ws[i] = w
+			if w > cw {
+				cw = w
 			}
 			r.font("", bodySize)
+		}
+		if col.MaxWidth > 0 && cw > col.MaxWidth {
+			cw = col.MaxWidth
+		}
+		if cw > ws[i] {
+			ws[i] = cw
 		}
 		if !col.Flex {
 			fixed += ws[i]
@@ -230,6 +234,61 @@ func (r *pdfRender) drawHeader(ws []float64, rep Report) {
 	if hh < minRowH {
 		hh = minRowH
 	}
+
+	// Baris grup header (mis. KUITANSI) di atas kolom. Kolom di luar grup
+	// digabung vertikal dengan header kolomnya (tinggi gh+hh).
+	if len(rep.ColGroups) > 0 {
+		gh := lh + 2*cellPadY
+		if gh < minRowH {
+			gh = minRowH
+		}
+		x = pdfLeft
+		for i := 0; i < len(rep.Cols); i++ {
+			if g, ok := groupAt(rep.ColGroups, i); ok {
+				w := 0.0
+				for j := i; j < i+g.Span && j < len(rep.Cols); j++ {
+					w += ws[j]
+				}
+				p.Rect(x, y, w, gh, "D")
+				r.drawHeaderText(g.Header, x, y, w, gh)
+				i += g.Span - 1
+				x += w
+			} else {
+				p.Rect(x, y, ws[i], gh+hh, "D")
+				r.drawHeaderText(rep.Cols[i].Header, x, y, ws[i], gh+hh)
+				x += ws[i]
+			}
+		}
+		// baris header kolom untuk kolom dalam grup
+		x = pdfLeft
+		for i := 0; i < len(rep.Cols); i++ {
+			if g, ok := groupAt(rep.ColGroups, i); ok {
+				for j := i; j < i+g.Span && j < len(rep.Cols); j++ {
+					c := rep.Cols[j]
+					p.Rect(x, y+gh, ws[j], hh, "D")
+					usable := ws[j] - 2*cellPadX
+					lines := r.wrapText(c.Header, usable)
+					if len(lines) == 0 {
+						lines = []string{""}
+					}
+					ly := y + gh + (hh-lh*float64(len(lines)))/2
+					for _, ln := range lines {
+						p.SetXY(x+cellPadX, ly)
+						p.CellFormat(usable, lh, ln, "", 0, "C", false, 0, "")
+						ly += lh
+					}
+					x += ws[j]
+				}
+				i += g.Span - 1
+			} else {
+				x += ws[i]
+			}
+		}
+		p.SetY(y + gh + hh)
+		return
+	}
+
+	// Baris header kolom.
 	for i, c := range rep.Cols {
 		p.Rect(x, y, ws[i], hh, "D")
 		usable := ws[i] - 2*cellPadX
@@ -246,6 +305,32 @@ func (r *pdfRender) drawHeader(ws []float64, rep Report) {
 		x += ws[i]
 	}
 	p.SetY(y + hh)
+}
+
+// groupAt mengembalikan grup header yang mencakup kolom col (bila ada).
+func groupAt(groups []ColGroup, col int) (ColGroup, bool) {
+	for _, g := range groups {
+		if col >= g.Start && col < g.Start+g.Span {
+			return g, true
+		}
+	}
+	return ColGroup{}, false
+}
+
+// drawHeaderText menggambar teks header grup rata tengah pada sel bergabung.
+func (r *pdfRender) drawHeaderText(text string, x, y, w, h float64) {
+	lh := lineH(headSize)
+	lines := r.wrapText(text, w-2*cellPadX)
+	if len(lines) == 0 {
+		return
+	}
+	ly := y + (h-lh*float64(len(lines)))/2
+	for _, ln := range lines {
+		p := r.p
+		p.SetXY(x+cellPadX, ly)
+		p.CellFormat(w-2*cellPadX, lh, ln, "", 0, "C", false, 0, "")
+		ly += lh
+	}
 }
 
 func (r *pdfRender) cellAlign(col Col, i int) string {

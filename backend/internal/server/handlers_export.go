@@ -239,6 +239,7 @@ func (s *Server) daftarTagihanExport(w http.ResponseWriter, r *http.Request, kin
 func (s *Server) handleRABExportExcel(w http.ResponseWriter, r *http.Request) {
 	s.rabExport(w, r, "excel")
 }
+
 func (s *Server) handleRABExportPDF(w http.ResponseWriter, r *http.Request) {
 	s.rabExport(w, r, "pdf")
 }
@@ -265,6 +266,45 @@ func (s *Server) rabExport(w http.ResponseWriter, r *http.Request, kind string) 
 		return
 	}
 	fname := reportFilename("RAB", b.Nama, tgl)
+	switch kind {
+	case "excel":
+		s.serveExcel(w, rep, fname)
+	case "pdf":
+		s.servePDF(w, rep, fname, r)
+	case "word":
+		s.serveWord(w, rep, fname, r.URL.Query().Get("orientasi") == "portrait")
+	}
+}
+
+func (s *Server) handleRekapPenggunaanDanaExportExcel(w http.ResponseWriter, r *http.Request) {
+	s.rekapPenggunaanDanaExport(w, r, "excel")
+}
+func (s *Server) handleRekapPenggunaanDanaExportPDF(w http.ResponseWriter, r *http.Request) {
+	s.rekapPenggunaanDanaExport(w, r, "pdf")
+}
+func (s *Server) handleRekapPenggunaanDanaExportWord(w http.ResponseWriter, r *http.Request) {
+	s.rekapPenggunaanDanaExport(w, r, "word")
+}
+
+// rekapPenggunaanDanaExport mengekspor laporan Rekapitulasi Penggunaan Dana.
+func (s *Server) rekapPenggunaanDanaExport(w http.ResponseWriter, r *http.Request, kind string) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	b, err := s.Store.GetBantuan(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	tgl, _, _ := exportParams(r)
+	rep, err := s.buildRekapPenggunaanDana(r.Context(), &b, tgl)
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	fname := reportFilename("RekapPenggunaanDana", b.Nama, tgl)
 	switch kind {
 	case "excel":
 		s.serveExcel(w, rep, fname)

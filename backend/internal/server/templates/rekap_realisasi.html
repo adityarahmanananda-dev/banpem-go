@@ -46,15 +46,11 @@
       </thead>
       <tbody>
         {{range .Compact}}
-        <tr {{if eq .Kind "subtotal"}}class="table-light fw-bold"{{end}}>
+        <tr {{if .Bold}}class="table-light fw-bold"{{end}}>
           <td style="padding-left:calc({{.Depth}} * 2rem)">{{.Label}}</td>
-          {{if eq .Kind "header"}}
-          <td></td><td></td><td></td>
-          {{else}}
           <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .Pagu}}</span></div></td>
           <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .Realisasi}}</span></div></td>
           <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .Sisa}}</span></div></td>
-          {{end}}
         </tr>
         {{else}}
         <tr><td colspan="4" class="text-center text-muted">Belum ada realisasi.</td></tr>

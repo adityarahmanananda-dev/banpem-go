@@ -253,17 +253,76 @@ func ExcelBytes(r Report) ([]byte, error) {
 		return nil, err
 	}
 
-	// Header (baris 4).
-	for i, c := range r.Cols {
-		if err := f.SetCellValue(sheet, cellAt(i+1, 4), c.Header); err != nil {
+	// Baris grup header (mis. KUITANSI) + header kolom. Kolom di luar grup
+	// digabung vertikal dengan header kolomnya agar tidak ada sel kosong.
+	headerRow := 4
+	dataRow := 5
+	if len(r.ColGroups) > 0 {
+		cover := map[int]bool{}
+		for _, g := range r.ColGroups {
+			for j := g.Start; j < g.Start+g.Span; j++ {
+				cover[j] = true
+			}
+		}
+		// latar seluruh sel baris 4 & 5
+		for rr := 4; rr <= 5; rr++ {
+			for i := 1; i <= n; i++ {
+				if err := f.SetCellStyle(sheet, cellAt(i, rr), cellAt(i, rr), headerStyle); err != nil {
+					return nil, err
+				}
+			}
+		}
+		// grup header horizontal
+		for _, g := range r.ColGroups {
+			start, end := g.Start+1, g.Start+g.Span
+			if err := f.MergeCell(sheet, cellAt(start, 4), cellAt(end, 4)); err != nil {
+				return nil, err
+			}
+			if err := f.SetCellValue(sheet, cellAt(start, 4), g.Header); err != nil {
+				return nil, err
+			}
+		}
+		// kolom non-grup: gabung vertikal dengan header kolom di bawahnya
+		for i := 0; i < n; i++ {
+			if cover[i] {
+				continue
+			}
+			if err := f.MergeCell(sheet, cellAt(i+1, 4), cellAt(i+1, 5)); err != nil {
+				return nil, err
+			}
+			if err := f.SetCellValue(sheet, cellAt(i+1, 4), r.Cols[i].Header); err != nil {
+				return nil, err
+			}
+		}
+		// header kolom dalam grup
+		for i, c := range r.Cols {
+			if !cover[i] {
+				continue
+			}
+			if err := f.SetCellValue(sheet, cellAt(i+1, 5), c.Header); err != nil {
+				return nil, err
+			}
+		}
+		if err := f.SetRowHeight(sheet, 4, 20); err != nil {
 			return nil, err
 		}
-		if err := f.SetCellStyle(sheet, cellAt(i+1, 4), cellAt(i+1, 4), headerStyle); err != nil {
+		if err := f.SetRowHeight(sheet, 5, 22); err != nil {
 			return nil, err
 		}
-	}
-	if err := f.SetRowHeight(sheet, 4, 22); err != nil {
-		return nil, err
+		headerRow = 5
+		dataRow = 6
+	} else {
+		for i, c := range r.Cols {
+			if err := f.SetCellValue(sheet, cellAt(i+1, 4), c.Header); err != nil {
+				return nil, err
+			}
+			if err := f.SetCellStyle(sheet, cellAt(i+1, 4), cellAt(i+1, 4), headerStyle); err != nil {
+				return nil, err
+			}
+		}
+		if err := f.SetRowHeight(sheet, 4, 22); err != nil {
+			return nil, err
+		}
 	}
 
 	// Lebar kolom.
@@ -277,8 +336,8 @@ func ExcelBytes(r Report) ([]byte, error) {
 		}
 	}
 
-	// Data mulai baris 5.
-	row := 5
+	// Data mulai dataRow.
+	row := dataRow
 	for ri, dataRow := range r.Rows {
 		bold := ri < len(r.RowBold) && r.RowBold[ri]
 		noBorder := ri < len(r.RowNoBorder) && r.RowNoBorder[ri]
@@ -469,18 +528,18 @@ func ExcelBytes(r Report) ([]byte, error) {
 		return nil, err
 	}
 
-	// Freeze baris 4 & print title 1:4.
+	// Freeze & print title sampai baris header kolom.
 	if err := f.SetPanes(sheet, &excelize.Panes{
 		Freeze:      true,
-		YSplit:      4,
-		TopLeftCell: cellAt(1, 5),
+		YSplit:      headerRow,
+		TopLeftCell: cellAt(1, headerRow+1),
 		ActivePane:  "bottomLeft",
 	}); err != nil {
 		return nil, err
 	}
 	_ = f.SetDefinedName(&excelize.DefinedName{
 		Name:     "_xlnm.Print_Titles",
-		RefersTo: fmt.Sprintf("%s!$1:$4", sheet),
+		RefersTo: fmt.Sprintf("%s!$1:$%d", sheet, headerRow),
 		Scope:    sheet,
 	})
 	orientation := "landscape"

@@ -160,9 +160,48 @@ func wordDocumentXML(rep Report, landscape bool) string {
 	}
 	b.WriteString("</w:tblGrid>")
 
-	// Header (berulang).
+	// Baris grup header (berulang), mis. KUITANSI merangkum beberapa kolom.
+	// Kolom di luar grup digabung vertikal dengan header kolomnya.
+	if len(rep.ColGroups) > 0 {
+		cover := map[int]ColGroup{}
+		for _, g := range rep.ColGroups {
+			cover[g.Start] = g
+		}
+		b.WriteString("<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>")
+		i := 0
+		for i < len(rep.Cols) {
+			if g, ok := cover[i]; ok {
+				span := g.Span
+				tw := 0
+				for j := i; j < i+span && j < len(rep.Cols); j++ {
+					tw += twips[j]
+				}
+				b.WriteString(wcell(g.Header, cellOpts{
+					wTwips: tw, align: "center", bold: true,
+					fill: wordHeaderFill, color: "FFFFFF", gridSpan: span,
+				}))
+				i += span
+			} else {
+				b.WriteString(wcell(rep.Cols[i].Header, cellOpts{
+					wTwips: twips[i], align: "center", bold: true,
+					fill: wordHeaderFill, color: "FFFFFF", vMerge: "restart",
+				}))
+				i++
+			}
+		}
+		b.WriteString("</w:tr>")
+	}
+
+	// Header kolom (berulang).
 	b.WriteString("<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>")
 	for i, c := range rep.Cols {
+		if len(rep.ColGroups) > 0 {
+			if _, ok := groupAt(rep.ColGroups, i); !ok {
+				// lanjutan gabung vertikal dari baris grup.
+				b.WriteString(wcell("", cellOpts{wTwips: twips[i], vMerge: "continue"}))
+				continue
+			}
+		}
 		b.WriteString(wcell(c.Header, cellOpts{
 			wTwips: twips[i], align: "center", bold: true,
 			fill: wordHeaderFill, color: "FFFFFF",
@@ -379,6 +418,7 @@ type cellOpts struct {
 	gridSpan int
 	keepNext bool
 	noBorder bool
+	vMerge   string // "" | "restart" | "continue"
 }
 
 func wcell(text string, o cellOpts) string {
@@ -388,6 +428,9 @@ func wcell(text string, o cellOpts) string {
 	b.WriteString(fmt.Sprintf(`<w:tcW w:w="%d" w:type="dxa"/>`, o.wTwips))
 	if o.gridSpan > 1 {
 		b.WriteString(fmt.Sprintf(`<w:gridSpan w:val="%d"/>`, o.gridSpan))
+	}
+	if o.vMerge != "" {
+		b.WriteString(fmt.Sprintf(`<w:vMerge w:val="%s"/>`, o.vMerge))
 	}
 	if o.noBorder {
 		b.WriteString(`<w:tcBorders><w:top w:val="nil"/><w:bottom w:val="nil"/></w:tcBorders>`)

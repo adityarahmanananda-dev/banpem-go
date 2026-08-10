@@ -120,3 +120,36 @@ func (s *Server) handleRekapBelanjaReorder(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
+
+func (s *Server) handleRekapPenggunaanDana(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	b, err := s.Store.GetBantuan(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	invoices, err := s.Store.ListInvoices(r.Context(), id, "sort")
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	var total int64
+	for _, inv := range invoices {
+		total += inv.Bruto
+	}
+	ft, fm := s.getFlash(w, r)
+	data := struct {
+		baseView
+		Rows  []store.Invoice
+		Total int64
+	}{
+		baseView: baseView{Title: "Rekap Penggunaan Dana", Active: "rekap-penggunaan-dana", FlashType: ft, FlashMsg: fm,
+			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
+		Rows: invoices, Total: total,
+	}
+	s.render(w, r, "rekap_penggunaan_dana.html", data)
+}

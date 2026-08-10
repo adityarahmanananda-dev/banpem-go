@@ -21,6 +21,93 @@ type PivotRow struct {
 	Sisa int64
 }
 
+// KomponenRealisasi adalah komponen beserta nilai realisasinya.
+type KomponenRealisasi struct {
+	Komponen
+	Realisasi int64
+}
+
+// AktivitasRealisasi adalah aktivitas beserta pagu dan realisasi komponennya.
+type AktivitasRealisasi struct {
+	Aktivitas
+	Komponens []KomponenRealisasi
+	Pagu      int64
+	Realisasi int64
+}
+
+// SubRealisasi adalah sub kegiatan beserta agregasi aktivitasnya.
+type SubRealisasi struct {
+	SubKegiatan
+	Aktivitass []AktivitasRealisasi
+	Pagu       int64
+	Realisasi  int64
+}
+
+// KegiatanRealisasi adalah kegiatan beserta agregasi subnya.
+type KegiatanRealisasi struct {
+	Kegiatan
+	Subs      []SubRealisasi
+	Pagu      int64
+	Realisasi int64
+}
+
+// ListRealisasiTree mengembalikan pohon Kegiatan->Sub->Aktivitas->Komponen
+// dengan nilai Pagu (dari komponen) dan Realisasi (dari trx_invoice_realisasi)
+// teragregasi di tiap level, mirip tampilan RAB.
+func (s *Store) ListRealisasiTree(ctx context.Context, bantuanID int64) ([]KegiatanRealisasi, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT ko.id, COALESCE(SUM(r.bruto),0)
+		FROM trx_invoice_realisasi r
+		JOIN trx_invoice i ON i.id = r.invoice_id
+		JOIN komponen ko ON ko.id = r.komponen_id
+		WHERE i.bantuan_id=$1
+		GROUP BY ko.id`, bantuanID)
+	if err != nil {
+		return nil, err
+	}
+	real := map[int64]int64{}
+	for rows.Next() {
+		var id, v int64
+		if err := rows.Scan(&id, &v); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		real[id] = v
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	kegs, err := s.ListKegiatanTree(ctx, bantuanID)
+	if err != nil {
+		return nil, err
+	}
+	var out []KegiatanRealisasi
+	for _, k := range kegs {
+		kr := KegiatanRealisasi{Kegiatan: k.Kegiatan}
+		for _, sk := range k.Subs {
+			sr := SubRealisasi{SubKegiatan: sk.SubKegiatan}
+			for _, a := range sk.Aktivitass {
+				ar := AktivitasRealisasi{Aktivitas: a.Aktivitas}
+				for _, ko := range a.Komponens {
+					krk := KomponenRealisasi{Komponen: ko, Realisasi: real[ko.ID]}
+					ar.Komponens = append(ar.Komponens, krk)
+					ar.Pagu += ko.Pagu
+					ar.Realisasi += krk.Realisasi
+				}
+				sr.Aktivitass = append(sr.Aktivitass, ar)
+				sr.Pagu += ar.Pagu
+				sr.Realisasi += ar.Realisasi
+			}
+			kr.Subs = append(kr.Subs, sr)
+			kr.Pagu += sr.Pagu
+			kr.Realisasi += sr.Realisasi
+		}
+		out = append(out, kr)
+	}
+	return out, nil
+}
+
 // ListRealisasiPivot mengagregasi realisasi belanja berdasarkan level yang
 // dipilih (groups berisi urutan "kegiatan", "sub", "aktivitas", "komponen").
 // groups kosong => default semua level (paling detail). Mengembalikan baris

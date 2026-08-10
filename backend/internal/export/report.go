@@ -29,6 +29,17 @@ type Col struct {
 	// Money menandai kolom uang gaya pembukuan: "Rp." di kiri cell dan angka
 	// menempel di kanan cell (format akuntansi Excel).
 	Money bool
+	// MaxWidth membatasi lebar kolom (mm, untuk PDF) agar isi panjang membungkus
+	// alih-alih kolom melebar; 0 = tanpa batas.
+	MaxWidth float64
+}
+
+// ColGroup mendeskripsikan grup header di atas kolom (mis. "KUITANSI" yang
+// merangkum kolom No. Bukti Dokumen & Tanggal Bukti Dokumen).
+type ColGroup struct {
+	Header string
+	Start  int // indeks kolom pertama (0-based) yang dicakup grup
+	Span   int // jumlah kolom yang dicakup grup
 }
 
 // SigData adalah blok tanda tangan laporan.
@@ -50,6 +61,9 @@ type Report struct {
 	Cols     []Col
 	Rows     [][]any
 	TotalRow []any // nil jika tanpa TOTAL
+	// ColGroups menambahkan baris header berkelompok di atas kolom (mis.
+	// "KUITANSI" merangkum beberapa kolom). Bila kosong, tidak ada baris grup.
+	ColGroups []ColGroup
 	// RowBold menandai baris data yang harus dicetak tebal (baris subtotal
 	// pada pivot berjenjang). Panjangnya menyusul baris Rows.
 	RowBold []bool

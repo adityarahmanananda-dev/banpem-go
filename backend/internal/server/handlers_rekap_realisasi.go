@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
 	"ebku/internal/store"
@@ -52,14 +53,91 @@ type pivotDisplayRow struct {
 // pivotCompactRow adalah satu baris tampilan pivot gaya "Compact Form" Excel:
 // seluruh level hierarki dirapikan ke satu kolom berindentasi. Kind:
 // "header" (nama grup, tanpa angka), "leaf" (baris data terkecil), atau
-// "subtotal" (total per grup, tebal).
+// "subtotal" (total per grup, tebal). Bold menandai baris yang dicetak tebal
+// (header & subtotal) ala RAB.
 type pivotCompactRow struct {
 	Label     string
 	Depth     int
 	Kind      string
+	Bold      bool
 	Pagu      int64
 	Realisasi int64
 	Sisa      int64
+}
+
+// styleRABCompact menata baris pivot agar tampil seperti RAB: penomoran
+// I/A/1/a sesuai level nyata yang dipilih (groups) dan header dicetak tebal.
+func styleRABCompact(rows []pivotCompactRow, groups []string) []pivotCompactRow {
+	pos := map[string]int{}
+	for i, g := range groups {
+		pos[g] = i
+	}
+	counters := map[string]int{}
+	out := make([]pivotCompactRow, len(rows))
+	for i, r := range rows {
+		o := r
+		switch r.Kind {
+		case "subtotal":
+			o.Bold = true
+		case "header":
+			if _, ok := pos[groups[r.Depth]]; ok {
+				level := groups[r.Depth]
+				for j := pos[level] + 1; j < len(groups); j++ {
+					counters[groups[j]] = 0
+				}
+				counters[level]++
+				o.Label = rabLevelLabel(level, counters[level], o.Label)
+				o.Bold = true
+			}
+		case "leaf":
+			if _, ok := pos[groups[r.Depth]]; ok {
+				level := groups[r.Depth]
+				counters[level]++
+				o.Label = rabLevelLabel(level, counters[level], o.Label)
+			}
+		}
+		out[i] = o
+	}
+	return out
+}
+
+// rabLevelLabel memberi awalan penomoran & format sesuai level hierarki.
+func rabLevelLabel(level string, n int, label string) string {
+	switch level {
+	case "kegiatan":
+		return romanNumeral(n) + ". " + strings.ToUpper(label)
+	case "sub":
+		return letterUpper(n) + ". " + strings.ToUpper(label)
+	case "aktivitas":
+		return strconv.Itoa(n) + ". " + label
+	default:
+		return letterLower(n) + ". " + label
+	}
+}
+
+// mergeSubtotalsToHeaders menghilangkan baris subtotal terpisah: total tiap
+// grup dipindah ke baris header levelnya, sehingga nilai tampil di samping
+// nama level (gaya RAB), tanpa baris subtotal baru.
+func mergeSubtotalsToHeaders(rows []pivotCompactRow) []pivotCompactRow {
+	var out []pivotCompactRow
+	lastHeader := map[int]int{}
+	for _, r := range rows {
+		if r.Kind == "subtotal" {
+			if idx, ok := lastHeader[r.Depth]; ok {
+				h := &out[idx]
+				h.Pagu = r.Pagu
+				h.Realisasi = r.Realisasi
+				h.Sisa = r.Sisa
+				h.Bold = true
+			}
+			continue
+		}
+		if r.Kind == "header" {
+			lastHeader[r.Depth] = len(out)
+		}
+		out = append(out, r)
+	}
+	return out
 }
 
 // buildPivotCompact mengubah baris hasil agregasi menjadi urutan baris
@@ -177,7 +255,7 @@ func (s *Server) handleRekapRealisasi(w http.ResponseWriter, r *http.Request) {
 		baseView: baseView{Title: "Rekap Realisasi", Active: "rekap-realisasi", FlashType: ft, FlashMsg: fm,
 			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
 		ColHeader: strings.Join(headers, " / "),
-		Compact:   buildPivotCompact(disp),
+		Compact:   mergeSubtotalsToHeaders(styleRABCompact(buildPivotCompact(disp), groups)),
 		Total:     totalDisp,
 		Sel:       sel,
 	}

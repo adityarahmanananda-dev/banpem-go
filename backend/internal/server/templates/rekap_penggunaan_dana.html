@@ -1,0 +1,51 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-file-earmark-text"></i> Rekapitulasi Penggunaan Dana</h4>
+  <div class="dropdown">
+    <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Export</button>
+    <ul class="dropdown-menu">
+      <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/rekap-penggunaan-dana/export/excel">Excel</a></li>
+      <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/rekap-penggunaan-dana/export/pdf">PDF</a></li>
+      <li><a class="dropdown-item" href="#" data-export-url="/bantuan/{{.Bantuan.ID}}/rekap-penggunaan-dana/export/word">Word</a></li>
+    </ul>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light">
+        <tr>
+          <th rowspan="2" class="text-center align-middle" style="width:50px">No</th>
+          <th colspan="2" class="text-center align-middle">Kuitansi</th>
+          <th rowspan="2" class="text-center align-middle">Keperluan Pembayaran</th>
+          <th rowspan="2" class="text-center align-middle" style="width:200px">Nominal</th>
+        </tr>
+        <tr>
+          <th class="text-center align-middle" style="width:150px">No. Bukti Dokumen</th>
+          <th class="text-center align-middle" style="width:140px">Tanggal Bukti Dokumen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $i, $inv := .Rows}}
+        <tr>
+          <td class="text-center">{{inc $i}}</td>
+          <td>{{$inv.NomorBukti}}</td>
+          <td class="text-center">{{dateLongID $inv.Tanggal}}</td>
+          <td>{{$inv.Uraian}}</td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp $inv.Bruto}}</span></div></td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="text-center text-muted">Belum ada tagihan.</td></tr>
+        {{end}}
+      </tbody>
+      <tfoot class="table-light fw-bold">
+        <tr>
+          <td colspan="4" class="text-end">TOTAL</td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .Total}}</span></div></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{{end}}

@@ -17,6 +17,7 @@ func funcMap() template.FuncMap {
 		"dateID": func(t time.Time) string {
 			return t.Format("02-01-2006")
 		},
+		"dateLongID": tanggalID,
 		"dateTimeID": func(t time.Time) string {
 			return t.Format("02-01-2006 15:04")
 		},
@@ -71,6 +72,9 @@ func funcMap() template.FuncMap {
 			return strings.Split(s, sep)
 		},
 		"formatNPWP": formatNPWP,
+		"roman":       romanNumeral,
+		"letterUpper": letterUpper,
+		"letterLower": letterLower,
 	}
 }
 
