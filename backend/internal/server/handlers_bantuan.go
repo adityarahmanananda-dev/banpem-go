@@ -9,6 +9,32 @@ import (
 	"ebku/internal/store"
 )
 
+func (s *Server) handleBantuanMenu(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r, "id")
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	b, err := s.Store.GetBantuan(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	jenis := r.PathValue("jenis")
+	if jenis != "transaksi" && jenis != "laporan" {
+		jenis = "informasi"
+	}
+	data := struct {
+		baseView
+		Jenis string
+	}{
+		baseView: baseView{Title: "Menu " + b.Nama, Active: "bantuan-menu", Bantuan: &b,
+			Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
+		Jenis: jenis,
+	}
+	s.render(w, r, "menu.html", data)
+}
+
 func bantuanFromForm(r *http.Request) store.Bantuan {
 	nominal, _ := money.Parse(formStr(r, "nominal"))
 	var nominalPtr *int64

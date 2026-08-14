@@ -19,3 +19,6 @@ dist/
 Thumbs.db
 .idea/
 .vscode/
+
+# OpenCode session logs
+session-*.md

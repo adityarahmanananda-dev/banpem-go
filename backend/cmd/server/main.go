@@ -1,4 +1,4 @@
-// e-BKU: aplikasi web Buku Kas Umum keuangan bantuan pemerintah di sekolah.
+// Banpem-GO: aplikasi web Buku Kas Umum keuangan bantuan pemerintah di sekolah.
 package main
 
 import (
@@ -35,7 +35,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("inisialisasi server gagal: %v", err)
 	}
-	log.Printf("e-BKU berjalan di %s", addr)
+	log.Printf("Banpem-GO berjalan di %s", addr)
 	if err := http.ListenAndServe(addr, srv.Router()); err != nil {
 		log.Fatal(err)
 	}

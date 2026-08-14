@@ -273,8 +273,7 @@ func (s *Server) buildRekapBelanja(ctx context.Context, b *store.Bantuan, tglCet
 	}
 	cols := []export.Col{
 		{Header: "No", Width: 8, ExWidth: 6},
-		{Header: "Kegiatan", Width: 29, ExWidth: 20, Wrap: true, Flex: true},
-		{Header: "Sub Kegiatan", Width: 29, ExWidth: 20, Wrap: true, Flex: true},
+		{Header: "Kegiatan / Sub Kegiatan / Aktivitas", Width: 46, ExWidth: 30, Wrap: true, Flex: true, Left: true},
 		{Header: "Uraian Tagihan", Width: 40, ExWidth: 26, Wrap: true, Flex: true},
 		{Header: "Penyedia / Bank / No.Rek / NPWP", Width: 64, ExWidth: 34, Wrap: true, Flex: true, Top: true},
 		{Header: "Bruto", Width: 21, ExWidth: 18, Num: true},
@@ -286,7 +285,7 @@ func (s *Server) buildRekapBelanja(ctx context.Context, b *store.Bantuan, tglCet
 		Title:      "REKAP BELANJA",
 		Subtitle:   b.Nama,
 		Cols:       cols,
-		TotalMerge: 5,
+		TotalMerge: 4,
 		Landscape:  true,
 		Sig:        sigData(b, tglCetak),
 	}
@@ -300,7 +299,7 @@ func (s *Server) buildRekapBelanja(ctx context.Context, b *store.Bantuan, tglCet
 	var tBruto, tPPN, tPPh, tAdmin int64
 	for i, r := range rows {
 		rep.Rows = append(rep.Rows, []any{
-			i + 1, r.Kegiatan, r.SubKeg, r.Uraian, penyedia(r),
+			i + 1, kegiatanRich(r), r.Uraian, penyedia(r),
 			r.Bruto, r.PPN, r.PPH, r.BiayaAdmin,
 		})
 		tBruto += r.Bruto
@@ -308,8 +307,34 @@ func (s *Server) buildRekapBelanja(ctx context.Context, b *store.Bantuan, tglCet
 		tPPh += r.PPH
 		tAdmin += r.BiayaAdmin
 	}
-	rep.TotalRow = []any{"TOTAL", "", "", "", "", tBruto, tPPN, tPPh, tAdmin}
+	rep.TotalRow = []any{"TOTAL", "", "", "", tBruto, tPPN, tPPh, tAdmin}
 	return rep, nil
+}
+
+// kegiatanRich menggabungkan Kegiatan, Sub Kegiatan, dan Aktivitas menjadi cell
+// kaya: label (KEGIATAN:/SUB KEGIATAN:/AKTIVITAS:) dicetak tebal, nilainya normal,
+// dengan satu baris kosong di antara ketiganya.
+func kegiatanRich(r store.BelanjaRow) export.Rich {
+	return export.Rich{Segments: []export.RichSeg{
+		{Text: "KEGIATAN: ", Bold: true},
+		{Text: r.Kegiatan + "\n\n"},
+		{Text: "SUB KEGIATAN: ", Bold: true},
+		{Text: r.SubKeg + "\n\n"},
+		{Text: "AKTIVITAS: ", Bold: true},
+		{Text: r.Aktivitas},
+	}}
+}
+
+// kegiatanText menggabungkan Kegiatan, Sub Kegiatan, dan Aktivitas menjadi satu
+// teks berbaris untuk kolom gabungan Rekap Belanja.
+func kegiatanText(r store.BelanjaRow) string {
+	return strings.Join([]string{
+		"KEGIATAN: " + r.Kegiatan,
+		"",
+		"SUB KEGIATAN: " + r.SubKeg,
+		"",
+		"AKTIVITAS: " + r.Aktivitas,
+	}, "\n")
 }
 
 // buildRekapRealisasi membuat laporan Rekap Realisasi (pivot) sesuai level

@@ -158,7 +158,7 @@ func (s *Server) handlePencairan(w http.ResponseWriter, r *http.Request) {
 		Nominal   int64
 		Persen    int64
 	}{
-		baseView: baseView{Title: "Pencairan", Active: "keuangan", FlashType: ft, FlashMsg: fm,
+		baseView: baseView{Title: "Pencairan / Saldo Awal", Active: "keuangan", FlashType: ft, FlashMsg: fm,
 			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
 		Pencairan: list, Total: total, Nominal: nominal, Persen: persen,
 	}

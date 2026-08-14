@@ -474,6 +474,17 @@ func (r *pdfRender) rowHeight(row []any, cols []Col, ws []float64, bold bool) fl
 				continue // cell uang selalu satu baris
 			}
 		}
+		if rich, ok := cell.(Rich); ok {
+			n := r.richLineCount(rich, ws[i]-2*cellPadX)
+			if n < 1 {
+				n = 1
+			}
+			h := float64(n)*lh + 2*cellPadY
+			if h > max {
+				max = h
+			}
+			continue
+		}
 		usable := ws[i] - 2*cellPadX
 		lines := r.wrapText(r.cellText(cell, col), usable)
 		if len(lines) == 0 {
@@ -517,6 +528,10 @@ func (r *pdfRender) drawCell(cell any, col Col, i int, x, y, w, rh float64, bold
 			r.drawMoney(n, bold, x, y, w, rh)
 			return
 		}
+	}
+	if rich, ok := cell.(Rich); ok {
+		r.drawRich(rich, bold, x, y, w, rh)
+		return
 	}
 	text := r.cellText(cell, col)
 	if text == "" {
@@ -563,6 +578,113 @@ func (r *pdfRender) drawMoney(n int64, bold bool, x, y, w, rh float64) {
 	r.p.CellFormat(rpWidth, lh, "Rp.", "", 0, "L", false, 0, "")
 	r.p.SetXY(x+w-cellPadX-aw, ly)
 	r.p.CellFormat(aw, lh, amount, "", 0, "L", false, 0, "")
+}
+
+// richLines memecah segmen cell kaya menjadi baris logis (berdasarkan \n).
+func richLines(rich Rich) [][]RichSeg {
+	var out [][]RichSeg
+	var cur []RichSeg
+	for _, seg := range rich.Segments {
+		parts := strings.Split(seg.Text, "\n")
+		for i, part := range parts {
+			if i > 0 {
+				out = append(out, cur)
+				cur = nil
+			}
+			if part != "" {
+				cur = append(cur, RichSeg{Text: part, Bold: seg.Bold})
+			}
+		}
+	}
+	if len(cur) > 0 {
+		out = append(out, cur)
+	}
+	return out
+}
+
+// wrapRichSegs membungkus segmen teks kaya menjadi baris-baris yang muat di
+// usable, memperhitungkan lebar font tebal/normal tiap segmen.
+func (r *pdfRender) wrapRichSegs(segs []RichSeg, usable float64) [][]RichSeg {
+	var out [][]RichSeg
+	var cur []RichSeg
+	curW := 0.0
+	flush := func() {
+		if len(cur) > 0 {
+			out = append(out, cur)
+			cur = nil
+			curW = 0
+		}
+	}
+	segWidth := func(seg RichSeg) float64 {
+		style := ""
+		if seg.Bold {
+			style = "B"
+		}
+		r.font(style, bodySize)
+		return r.p.GetStringWidth(seg.Text)
+	}
+	add := func(seg RichSeg) {
+		w := segWidth(seg)
+		if curW+w > usable && len(cur) > 0 {
+			flush()
+		}
+		cur = append(cur, seg)
+		curW += w
+	}
+	for _, seg := range segs {
+		if segWidth(seg) > usable {
+			for _, w := range strings.Fields(seg.Text) {
+				add(RichSeg{Text: w + " ", Bold: seg.Bold})
+			}
+		} else {
+			add(seg)
+		}
+	}
+	flush()
+	return out
+}
+
+// richLineCount menghitung perkiraan jumlah baris tampilan cell kaya (baris
+// kosong antar paragraf ikut dihitung).
+func (r *pdfRender) richLineCount(rich Rich, usable float64) int {
+	n := 0
+	for _, line := range richLines(rich) {
+		c := len(r.wrapRichSegs(line, usable))
+		if c == 0 {
+			c = 1
+		}
+		n += c
+	}
+	return n
+}
+
+// drawRich menggambar cell teks kaya (label tebal, nilai normal) dengan wrap.
+func (r *pdfRender) drawRich(rich Rich, bold bool, x, y, w, rh float64) {
+	usable := w - 2*cellPadX
+	lh := lineH(bodySize)
+	ly := y + cellPadY
+	for _, line := range richLines(rich) {
+		subs := r.wrapRichSegs(line, usable)
+		if len(subs) == 0 {
+			ly += lh // baris kosong antar paragraf
+			continue
+		}
+		for _, sub := range subs {
+			cx := x + cellPadX
+			for _, seg := range sub {
+				style := ""
+				if seg.Bold || bold {
+					style = "B"
+				}
+				r.font(style, bodySize)
+				r.p.SetXY(cx, ly)
+				sw := r.p.GetStringWidth(seg.Text)
+				r.p.CellFormat(sw, lh, seg.Text, "", 0, "L", false, 0, "")
+				cx += sw
+			}
+			ly += lh
+		}
+	}
 }
 
 func (r *pdfRender) drawTotal(row []any, cols []Col, ws []float64, rh float64, merge int) {

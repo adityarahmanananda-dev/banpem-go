@@ -374,6 +374,7 @@ type BelanjaRow struct {
 	NPWP       string
 	Kegiatan   string
 	SubKeg     string
+	Aktivitas  string
 	Komponen   string
 	Bruto      int64
 	PPN        int64
@@ -390,6 +391,7 @@ func (s *Store) ListBelanja(ctx context.Context, bantuanID int64) ([]BelanjaRow,
 		i.bank, i.nomor_rekening, i.npwp,
 		string_agg(DISTINCT k.nama, E'\n' ORDER BY k.nama),
 		string_agg(DISTINCT sk.nama, E'\n' ORDER BY sk.nama),
+		string_agg(DISTINCT a.nama, E'\n' ORDER BY a.nama),
 		string_agg(DISTINCT ko.nama, E'\n' ORDER BY ko.nama),
 		SUM(r.bruto), SUM(r.nilai_ppn), SUM(r.nilai_pph), SUM(r.nilai_netto),
 		MAX(CASE WHEN lower(i.bank) <> lower(ba.bank) THEN 290000 ELSE 0 END)
@@ -411,7 +413,7 @@ func (s *Store) ListBelanja(ctx context.Context, bantuanID int64) ([]BelanjaRow,
 	for rows.Next() {
 		var r BelanjaRow
 		if err := rows.Scan(&r.SortOrder, &r.InvoiceID, &r.Tanggal, &r.Uraian, &r.Penyedia,
-			&r.Bank, &r.NoRek, &r.NPWP, &r.Kegiatan, &r.SubKeg, &r.Komponen,
+			&r.Bank, &r.NoRek, &r.NPWP, &r.Kegiatan, &r.SubKeg, &r.Aktivitas, &r.Komponen,
 			&r.Bruto, &r.PPN, &r.PPH, &r.Netto, &r.BiayaAdmin); err != nil {
 			return nil, err
 		}

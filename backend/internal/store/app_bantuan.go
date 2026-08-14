@@ -30,9 +30,13 @@ func (s *Store) CreateBantuan(ctx context.Context, b Bantuan) (int64, error) {
 		}
 		if b.Nominal != nil && *b.Nominal > 0 {
 			tanggal := time.Now()
-			_, err = tx.Exec(ctx, `INSERT INTO pencairan_hibah (bantuan_id, tahap, tanggal, nominal, keterangan)
-				VALUES ($1,1,$2,$3,'Pencairan awal hibah')`, id, tanggal, Tahap1Nominal(*b.Nominal))
-			if err != nil {
+			first := Tahap1Nominal(*b.Nominal)
+			if _, err := tx.Exec(ctx, `INSERT INTO pencairan_hibah (bantuan_id, tahap, tanggal, nominal, keterangan)
+				VALUES ($1,1,$2,$3,'Pencairan awal hibah')`, id, tanggal, first); err != nil {
+				return err
+			}
+			// Pencairan pertama otomatis menjadi saldo awal.
+			if err := setSaldoAwalTx(ctx, tx, id, first, tanggal); err != nil {
 				return err
 			}
 		}
@@ -120,26 +124,31 @@ func upsertSaldoAwalLedger(ctx context.Context, q Querier, bantuanID int64, tabl
 	return err
 }
 
+// setSaldoAwalTx menyimpan saldo awal dan memastikan entri 'saldo_awal' nomor 1
+// di BKU dan Buku Kas Bank, dalam transaksi yang sedang berjalan.
+func setSaldoAwalTx(ctx context.Context, q Querier, bantuanID, saldo int64, tanggal time.Time) error {
+	if _, err := q.Exec(ctx, `INSERT INTO saldo_awal (bantuan_id, saldo_awal, tanggal) VALUES ($1,$2,$3)
+		ON CONFLICT (bantuan_id) DO UPDATE SET saldo_awal=EXCLUDED.saldo_awal, tanggal=EXCLUDED.tanggal`,
+		bantuanID, saldo, tanggal); err != nil {
+		return err
+	}
+	if err := upsertSaldoAwalLedger(ctx, q, bantuanID, "bku", tanggal, saldo); err != nil {
+		return err
+	}
+	if err := RebuildLedger(ctx, q, bantuanID, "bku"); err != nil {
+		return err
+	}
+	if err := upsertSaldoAwalLedger(ctx, q, bantuanID, "bank", tanggal, saldo); err != nil {
+		return err
+	}
+	return RebuildLedger(ctx, q, bantuanID, "bank")
+}
+
 // SetSaldoAwal menyimpan saldo awal dan memastikan entri 'saldo_awal' nomor 1
 // di BKU dan Buku Kas Bank.
 func (s *Store) SetSaldoAwal(ctx context.Context, bantuanID, saldo int64, tanggal time.Time) error {
 	return s.WithTx(ctx, func(tx Tx) error {
-		_, err := tx.Exec(ctx, `INSERT INTO saldo_awal (bantuan_id, saldo_awal, tanggal) VALUES ($1,$2,$3)
-			ON CONFLICT (bantuan_id) DO UPDATE SET saldo_awal=EXCLUDED.saldo_awal, tanggal=EXCLUDED.tanggal`,
-			bantuanID, saldo, tanggal)
-		if err != nil {
-			return err
-		}
-		if err := upsertSaldoAwalLedger(ctx, tx, bantuanID, "bku", tanggal, saldo); err != nil {
-			return err
-		}
-		if err := RebuildLedger(ctx, tx, bantuanID, "bku"); err != nil {
-			return err
-		}
-		if err := upsertSaldoAwalLedger(ctx, tx, bantuanID, "bank", tanggal, saldo); err != nil {
-			return err
-		}
-		return RebuildLedger(ctx, tx, bantuanID, "bank")
+		return setSaldoAwalTx(ctx, tx, bantuanID, saldo, tanggal)
 	})
 }
 
@@ -161,9 +170,13 @@ func (s *Store) EnsureAutoPencairan(ctx context.Context, bantuanID int64) error 
 		if cnt > 0 {
 			return nil
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO pencairan_hibah (bantuan_id, tahap, tanggal, nominal, keterangan)
-			VALUES ($1,1,$2,$3,'Pencairan awal hibah')`, bantuanID, time.Now(), Tahap1Nominal(*b.Nominal))
-		return err
+		first := Tahap1Nominal(*b.Nominal)
+		tanggal := time.Now()
+		if _, err := tx.Exec(ctx, `INSERT INTO pencairan_hibah (bantuan_id, tahap, tanggal, nominal, keterangan)
+			VALUES ($1,1,$2,$3,'Pencairan awal hibah')`, bantuanID, tanggal, first); err != nil {
+			return err
+		}
+		return setSaldoAwalTx(ctx, tx, bantuanID, first, tanggal)
 	})
 }
 
@@ -217,9 +230,21 @@ func (s *Store) CreatePencairan(ctx context.Context, bantuanID int64, p Pencaira
 		if err := tx.QueryRow(ctx, `SELECT COALESCE(MAX(tahap),0) FROM pencairan_hibah WHERE bantuan_id=$1`, bantuanID).Scan(&maxTahap); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO pencairan_hibah (bantuan_id, tahap, tanggal, nominal, keterangan)
-			VALUES ($1,$2,$3,$4,$5)`, bantuanID, maxTahap+1, p.Tanggal, p.Nominal, p.Keterangan)
-		return err
+		if _, err := tx.Exec(ctx, `INSERT INTO pencairan_hibah (bantuan_id, tahap, tanggal, nominal, keterangan)
+			VALUES ($1,$2,$3,$4,$5)`, bantuanID, maxTahap+1, p.Tanggal, p.Nominal, p.Keterangan); err != nil {
+			return err
+		}
+		// Pencairan pertama otomatis menjadi saldo awal bila saldo awal belum
+		// pernah diatur (apapun nilai nominal bantuan).
+		if maxTahap == 0 && p.Tanggal != nil {
+			var cnt int
+			if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM saldo_awal WHERE bantuan_id=$1`, bantuanID).Scan(&cnt); err == nil && cnt == 0 {
+				if err := setSaldoAwalTx(ctx, tx, bantuanID, p.Nominal, *p.Tanggal); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	})
 }
 

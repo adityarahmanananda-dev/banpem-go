@@ -126,8 +126,8 @@ func (s *Store) ListRealisasiPivot(ctx context.Context, bantuanID int64, groups 
 		JOIN sub_kegiatan sk ON sk.id = a.sub_kegiatan_id
 		JOIN kegiatan k ON k.id = sk.kegiatan_id
 		WHERE i.bantuan_id=$1
-		GROUP BY ko.id, k.nama, sk.nama, a.nama, ko.nama
-		ORDER BY k.nama, sk.nama, a.nama, ko.nama`, bantuanID)
+		GROUP BY ko.id, k.id, sk.id, a.id, k.nama, sk.nama, a.nama, ko.nama
+		ORDER BY k.id, sk.id, a.id, ko.id`, bantuanID)
 	if err != nil {
 		return nil, PivotRow{}, err
 	}

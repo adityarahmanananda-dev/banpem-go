@@ -65,6 +65,7 @@ func (s *Server) Router() http.Handler {
 
 	mux.HandleFunc("GET /bantuan/tambah", s.handleBantuanTambahGet)
 	mux.HandleFunc("POST /bantuan/tambah", s.handleBantuanTambahPost)
+	mux.HandleFunc("GET /bantuan/{id}/menu/{jenis}", s.handleBantuanMenu)
 	mux.HandleFunc("GET /bantuan/{id}/edit", s.handleBantuanEditGet)
 	mux.HandleFunc("POST /bantuan/{id}/edit", s.handleBantuanEditPost)
 	mux.HandleFunc("GET /bantuan/{id}/saldo-awal", s.handleSaldoAwalGet)

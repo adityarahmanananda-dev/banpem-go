@@ -42,6 +42,19 @@ type ColGroup struct {
 	Span   int // jumlah kolom yang dicakup grup
 }
 
+// RichSeg adalah satu segmen teks dalam cell kaya (rich text) dengan gaya tebal
+// tersendiri.
+type RichSeg struct {
+	Text string
+	Bold bool
+}
+
+// Rich adalah isi cell yang memuat segmen teks bergaya berbeda (mis. label
+// "KEGIATAN:" tebal diikuti nilai normal pada kolom gabungan Rekap Belanja).
+type Rich struct {
+	Segments []RichSeg
+}
+
 // SigData adalah blok tanda tangan laporan.
 type SigData struct {
 	DateText  string
@@ -139,6 +152,12 @@ func CellText(v any) string {
 		return t
 	case nil:
 		return ""
+	case Rich:
+		var b strings.Builder
+		for _, s := range t.Segments {
+			b.WriteString(s.Text)
+		}
+		return b.String()
 	}
 	return ""
 }

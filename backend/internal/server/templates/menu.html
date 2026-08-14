@@ -1,0 +1,35 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-grid-3x3-gap"></i> Menu {{.Bantuan.Nama}}</h4>
+  <a href="/" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kembali</a>
+</div>
+
+<ul class="nav nav-pills mb-3">
+  <li class="nav-item"><a class="nav-link {{if eq .Jenis "informasi"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/menu/informasi"><i class="bi bi-info-circle"></i> Informasi Bantuan</a></li>
+  <li class="nav-item"><a class="nav-link {{if eq .Jenis "transaksi"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/menu/transaksi"><i class="bi bi-arrow-left-right"></i> Transaksi</a></li>
+  <li class="nav-item"><a class="nav-link {{if eq .Jenis "laporan"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/menu/laporan"><i class="bi bi-files"></i> Laporan</a></li>
+</ul>
+
+<div class="row g-3">
+  {{if eq .Jenis "informasi"}}
+  <div class="col-12 col-md-4"><a class="btn btn-outline-primary btn-lg w-100 py-4" href="/bantuan/{{.Bantuan.ID}}/kegiatan"><i class="bi bi-diagram-3 fs-3 d-block mb-1"></i> Rencana Anggaran Biaya</a></div>
+  <div class="col-12 col-md-4"><a class="btn btn-outline-primary btn-lg w-100 py-4" href="/bantuan/{{.Bantuan.ID}}/pencairan"><i class="bi bi-arrow-down-circle fs-3 d-block mb-1"></i> Pencairan / Saldo Awal</a></div>
+  <div class="col-12 col-md-4"><a class="btn btn-outline-primary btn-lg w-100 py-4" href="/bantuan/{{.Bantuan.ID}}/edit"><i class="bi bi-pencil-square fs-3 d-block mb-1"></i> Edit Bantuan</a></div>
+  {{end}}
+
+  {{if eq .Jenis "transaksi"}}
+  <div class="col-12 col-md-4"><a class="btn btn-outline-primary btn-lg w-100 py-4" href="/bantuan/{{.Bantuan.ID}}/tagihan"><i class="bi bi-receipt fs-3 d-block mb-1"></i> Input Tagihan</a></div>
+  <div class="col-12 col-md-4"><a class="btn btn-outline-primary btn-lg w-100 py-4" href="/bantuan/{{.Bantuan.ID}}/bku/setor-pajak"><i class="bi bi-bank2 fs-3 d-block mb-1"></i> Setor Pajak</a></div>
+  <div class="col-12 col-md-4"><a class="btn btn-outline-primary btn-lg w-100 py-4" href="/bantuan/{{.Bantuan.ID}}/jasa-giro"><i class="bi bi-piggy-bank fs-3 d-block mb-1"></i> Jasa Giro</a></div>
+  {{end}}
+
+  {{if eq .Jenis "laporan"}}
+  <div class="col-12 col-md-4"><a class="btn btn-outline-primary btn-lg w-100 py-4" href="/bantuan/{{.Bantuan.ID}}/bku"><i class="bi bi-journal-text fs-3 d-block mb-1"></i> Buku Kas Umum</a></div>
+  <div class="col-12 col-md-4"><a class="btn btn-outline-primary btn-lg w-100 py-4" href="/bantuan/{{.Bantuan.ID}}/bank"><i class="bi bi-bank fs-3 d-block mb-1"></i> Buku Kas Bank</a></div>
+  <div class="col-12 col-md-4"><a class="btn btn-outline-primary btn-lg w-100 py-4" href="/bantuan/{{.Bantuan.ID}}/rekap-pajak"><i class="bi bi-pie-chart fs-3 d-block mb-1"></i> Rekap Pajak</a></div>
+  <div class="col-12 col-md-4"><a class="btn btn-outline-primary btn-lg w-100 py-4" href="/bantuan/{{.Bantuan.ID}}/rekap-penggunaan-dana"><i class="bi bi-file-earmark-text fs-3 d-block mb-1"></i> Rekap Penggunaan Dana</a></div>
+  <div class="col-12 col-md-4"><a class="btn btn-outline-primary btn-lg w-100 py-4" href="/bantuan/{{.Bantuan.ID}}/rekap-belanja"><i class="bi bi-list-check fs-3 d-block mb-1"></i> Rekap Belanja</a></div>
+  <div class="col-12 col-md-4"><a class="btn btn-outline-primary btn-lg w-100 py-4" href="/bantuan/{{.Bantuan.ID}}/rekap-realisasi"><i class="bi bi-grid-1x2 fs-3 d-block mb-1"></i> Rekap Realisasi</a></div>
+  {{end}}
+</div>
+{{end}}

@@ -376,6 +376,26 @@ func ExcelBytes(r Report) ([]byte, error) {
 				return nil, err
 			}
 			st := textStyle
+			if rich, ok := cell.(Rich); ok {
+				runs := make([]excelize.RichTextRun, 0, len(rich.Segments))
+				for _, s := range rich.Segments {
+					rt := excelize.RichTextRun{Text: s.Text}
+					if s.Bold {
+						rt.Font = &excelize.Font{Bold: true}
+					}
+					runs = append(runs, rt)
+				}
+				if err := f.SetCellRichText(sheet, addr, runs); err != nil {
+					return nil, err
+				}
+				if noBorder {
+					st = textNoBorderStyle
+				}
+				if err := f.SetCellStyle(sheet, addr, addr, st); err != nil {
+					return nil, err
+				}
+				continue
+			}
 			switch {
 			case col.Num:
 				st = numStyle

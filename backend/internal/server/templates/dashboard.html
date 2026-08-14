@@ -26,21 +26,15 @@
         <div class="d-flex justify-content-between"><span class="text-muted">Jumlah Tagihan</span><b>{{$s.InvoiceCount}}</b></div>
       </div>
       <div class="card-footer">
-        <div class="row g-1">
-          <div class="col-6 d-flex flex-column gap-1">
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/bku">BKU</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/bank">Bank</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/tagihan">Input Tagihan</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/rekap-pajak">Rekap Pajak</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/rekap-belanja">Rekap Belanja</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/rekap-penggunaan-dana">Rekap Penggunaan Dana</a>
+        <div class="row g-2">
+          <div class="col-12 col-md-4">
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/menu/informasi"><i class="bi bi-info-circle"></i> Informasi Bantuan</a>
           </div>
-          <div class="col-6 d-flex flex-column gap-1">
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/kegiatan">Rencana Anggaran Biaya</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/jasa-giro">Jasa Giro</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/pencairan">Pencairan</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/saldo-awal">Set Saldo Awal</a>
-            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/edit">Edit Bantuan</a>
+          <div class="col-12 col-md-4">
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/menu/transaksi"><i class="bi bi-arrow-left-right"></i> Transaksi</a>
+          </div>
+          <div class="col-12 col-md-4">
+            <a class="btn btn-outline-primary btn-sm w-100" href="/bantuan/{{$s.ID}}/menu/laporan"><i class="bi bi-files"></i> Laporan</a>
           </div>
         </div>
       </div>

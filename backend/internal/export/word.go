@@ -95,15 +95,15 @@ func wordCoreProps(title string) string {
 	return fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
 <dc:title>%s</dc:title>
-<dc:creator>eBKU</dc:creator>
-<cp:lastModifiedBy>eBKU</cp:lastModifiedBy>
+<dc:creator>Banpem-GO</dc:creator>
+<cp:lastModifiedBy>Banpem-GO</cp:lastModifiedBy>
 </cp:coreProperties>`, escXML(title))
 }
 
 func wordAppProps() string {
 	return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-<Application>eBKU</Application>
+<Application>Banpem-GO</Application>
 </Properties>`
 }
 
@@ -227,6 +227,10 @@ func wordDocumentXML(rep Report, landscape bool) string {
 			}
 			if j == 0 && !rep.Cols[j].Num && !rep.Cols[j].Left {
 				align = "center"
+			}
+			if rich, ok := cell.(Rich); ok {
+				b.WriteString(wcellRich(rich, cellOpts{wTwips: twips[j], align: align, bold: bold, noBorder: noBorder}))
+				continue
 			}
 			b.WriteString(wcell(CellText(cell), cellOpts{wTwips: twips[j], align: align, bold: bold, noBorder: noBorder}))
 		}
@@ -468,6 +472,49 @@ func wcell(text string, o cellOpts) string {
 			b.WriteString(escXML(line))
 		}
 		b.WriteString("</w:t></w:r>")
+	}
+	b.WriteString("</w:p></w:tc>")
+	return b.String()
+}
+
+// wcellRich menyusun cell dengan segmen teks berbeda gaya (label tebal, nilai
+// normal), dengan baris baru antar segmen.
+func wcellRich(rich Rich, o cellOpts) string {
+	var b strings.Builder
+	b.WriteString("<w:tc>")
+	b.WriteString("<w:tcPr>")
+	b.WriteString(fmt.Sprintf(`<w:tcW w:w="%d" w:type="dxa"/>`, o.wTwips))
+	if o.noBorder {
+		b.WriteString(`<w:tcBorders><w:top w:val="nil"/><w:bottom w:val="nil"/></w:tcBorders>`)
+	}
+	b.WriteString("<w:vAlign w:val=\"center\"/>")
+	b.WriteString("</w:tcPr>")
+	b.WriteString("<w:p><w:pPr>")
+	if o.keepNext {
+		b.WriteString("<w:keepNext/>")
+	}
+	if o.align != "" {
+		b.WriteString(fmt.Sprintf(`<w:jc w:val="%s"/>`, o.align))
+	}
+	b.WriteString("</w:pPr>")
+
+	for _, seg := range rich.Segments {
+		parts := strings.Split(seg.Text, "\n")
+		for i, part := range parts {
+			if i > 0 {
+				b.WriteString("<w:r><w:br/></w:r>")
+			}
+			if part == "" {
+				continue
+			}
+			b.WriteString("<w:r><w:rPr>")
+			if o.bold || seg.Bold {
+				b.WriteString("<w:b/>")
+			}
+			b.WriteString("<w:sz w:val=\"18\"/><w:szCs w:val=\"18\"/>")
+			b.WriteString("</w:rPr>")
+			b.WriteString(`<w:t xml:space="preserve">` + escXML(part) + `</w:t></w:r>`)
+		}
 	}
 	b.WriteString("</w:p></w:tc>")
 	return b.String()
