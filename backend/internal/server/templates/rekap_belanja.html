@@ -14,7 +14,7 @@
 
 <div class="row g-3 mb-3">
   <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Bruto</div><div class="fs-5 fw-bold">{{fmtMoney .TotBruto}}</div></div></div></div>
-  <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Pajak</div><div class="fs-5 fw-bold">{{fmtMoney .TotPPN}}</div></div></div></div>
+  <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Pajak</div><div class="fs-5 fw-bold">{{fmtMoney (add .TotPPN .TotPPh)}}</div></div></div></div>
   <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Biaya Admin</div><div class="fs-5 fw-bold">{{fmtMoney .TotBiayaAdmin}}</div></div></div></div>
 </div>
 
