@@ -177,7 +177,7 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 		}
 		if admin > 0 {
 			if _, err := AppendBankLedger(ctx, tx, LedgerEntry{
-				BantuanID: bantuanID, Tanggal: &tgl, NomorBukti: "", Uraian: "Biaya Admin untuk " + in.Uraian,
+				BantuanID: bantuanID, Tanggal: &tgl, NomorBukti: in.NomorBukti, Uraian: "Biaya Admin untuk " + in.Uraian,
 				Debit: admin, Kredit: 0, InvoiceID: &iidPtr, JenisTransaksi: "biaya_admin",
 			}); err != nil {
 				return err
@@ -273,7 +273,7 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 		}
 		if admin > 0 {
 			if _, err := AppendBankLedger(ctx, tx, LedgerEntry{
-				BantuanID: inv.BantuanID, Tanggal: &tgl, NomorBukti: "", Uraian: "Biaya Admin untuk " + in.Uraian,
+				BantuanID: inv.BantuanID, Tanggal: &tgl, NomorBukti: in.NomorBukti, Uraian: "Biaya Admin untuk " + in.Uraian,
 				Debit: admin, Kredit: 0, InvoiceID: &iidPtr, JenisTransaksi: "biaya_admin",
 			}); err != nil {
 				return err
