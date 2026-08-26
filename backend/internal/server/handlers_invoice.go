@@ -152,6 +152,17 @@ func parseInvoiceForm(r *http.Request) (store.InvoiceInput, error) {
 	if in.BiayaAdminDibebankan == "" {
 		in.BiayaAdminDibebankan = "tidak"
 	}
+	// Koreksi nilai pajak (bila diisi, menggantikan hasil perhitungan).
+	if s := formStr(r, "ppn"); s != "" {
+		if v, err := money.Parse(s); err == nil {
+			in.PPNOverride = &v
+		}
+	}
+	if s := formStr(r, "pph"); s != "" {
+		if v, err := money.Parse(s); err == nil {
+			in.PPHOverride = &v
+		}
+	}
 	if k := formStr(r, "kategori_narasumber"); k != "" {
 		ki := int(formInt(r, "kategori_narasumber"))
 		in.KategoriNarasumber = &ki

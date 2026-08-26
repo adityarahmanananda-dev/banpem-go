@@ -11,38 +11,120 @@
   </div>
 </div>
 
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="get" class="d-flex flex-wrap align-items-center gap-2 mb-0">
+      <span class="text-muted small fw-bold me-1">Kolom tambahan:</span>
+      <div class="form-check form-check-inline mb-0">
+        <input class="form-check-input" type="checkbox" name="kegiatan" value="1" id="colKegiatan" {{if .SelKegiatan}}checked{{end}} onchange="this.form.submit()">
+        <label class="form-check-label" for="colKegiatan">Kegiatan</label>
+      </div>
+      <div class="form-check form-check-inline mb-0">
+        <input class="form-check-input" type="checkbox" name="sub_kegiatan" value="1" id="colSubKeg" {{if .SelSubKeg}}checked{{end}} onchange="this.form.submit()">
+        <label class="form-check-label" for="colSubKeg">Sub Kegiatan</label>
+      </div>
+      <div class="form-check form-check-inline mb-0">
+        <input class="form-check-input" type="checkbox" name="aktivitas" value="1" id="colAktivitas" {{if .SelAktivitas}}checked{{end}} onchange="this.form.submit()">
+        <label class="form-check-label" for="colAktivitas">Aktivitas</label>
+      </div>
+      <div class="form-check form-check-inline mb-0">
+        <input class="form-check-input" type="checkbox" name="komponen" value="1" id="colKomponen" {{if .SelKomponen}}checked{{end}} onchange="this.form.submit()">
+        <label class="form-check-label" for="colKomponen">Komponen</label>
+      </div>
+      <div class="form-check form-check-inline mb-0">
+        <input class="form-check-input" type="checkbox" name="pajak" value="1" id="colPajak" {{if .SelPajak}}checked{{end}} onchange="this.form.submit()">
+        <label class="form-check-label" for="colPajak">Pajak Yang Dipungut dan Disetorkan</label>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="card">
   <div class="table-responsive">
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light">
+        {{if .HeaderRows}}
+        {{range $row := .HeaderRows}}
+        <tr>
+          {{range $cell := $row}}{{if gt $cell.Rowspan 0}}<th colspan="{{$cell.Colspan}}" rowspan="{{$cell.Rowspan}}" class="text-center align-middle">{{$cell.Text}}</th>{{end}}{{end}}
+        </tr>
+        {{end}}
+        {{else if .HasDist}}
         <tr>
           <th rowspan="2" class="text-center align-middle" style="width:50px">No</th>
           <th colspan="2" class="text-center align-middle">Kuitansi</th>
           <th rowspan="2" class="text-center align-middle">Keperluan Pembayaran</th>
-          <th rowspan="2" class="text-center align-middle" style="width:200px">Nominal</th>
+          <th colspan="{{.NumCols}}" class="text-center align-middle">Nilai Nominal (Rp)</th>
+          {{if .SelPajak}}<th colspan="4" class="text-center align-middle">Pajak Yang Dipungut dan Disetorkan (Rp)</th>{{end}}
         </tr>
         <tr>
           <th class="text-center align-middle" style="width:150px">No. Bukti Dokumen</th>
           <th class="text-center align-middle" style="width:140px">Tanggal Bukti Dokumen</th>
+          {{range .DistCols}}<th class="text-center align-middle">{{.}}</th>{{end}}
+          {{if .SelPajak}}
+          <th class="text-center align-middle">PPN</th>
+          <th class="text-center align-middle">PPh 21</th>
+          <th class="text-center align-middle">PPh 22</th>
+          <th class="text-center align-middle">PPh 23</th>
+          {{end}}
         </tr>
+        {{else}}
+        <tr>
+          <th rowspan="2" class="text-center align-middle" style="width:50px">No</th>
+          <th colspan="2" class="text-center align-middle">Kuitansi</th>
+          <th rowspan="2" class="text-center align-middle">Keperluan Pembayaran</th>
+          <th rowspan="2" class="text-center align-middle" style="width:180px">Nominal (Rp.)</th>
+          {{if .SelPajak}}<th colspan="4" class="text-center align-middle">Pajak Yang Dipungut dan Disetorkan (Rp)</th>{{end}}
+        </tr>
+        <tr>
+          <th class="text-center align-middle" style="width:150px">No. Bukti Dokumen</th>
+          <th class="text-center align-middle" style="width:140px">Tanggal Bukti Dokumen</th>
+          {{if .SelPajak}}
+          <th class="text-center align-middle">PPN</th>
+          <th class="text-center align-middle">PPh 21</th>
+          <th class="text-center align-middle">PPh 22</th>
+          <th class="text-center align-middle">PPh 23</th>
+          {{end}}
+        </tr>
+        {{end}}
       </thead>
       <tbody>
         {{range $i, $inv := .Rows}}
         <tr>
           <td class="text-center">{{inc $i}}</td>
-          <td>{{$inv.NomorBukti}}</td>
+          <td>{{$inv.Bukti}}</td>
           <td class="text-center">{{dateLongID $inv.Tanggal}}</td>
           <td>{{$inv.Uraian}}</td>
+          {{if $.HasDist}}
+          {{range $j, $c := $.DistCols}}<td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp (index $inv.Dist $j)}}</span></div></td>{{end}}
+          {{else}}
           <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp $inv.Bruto}}</span></div></td>
+          {{end}}
+          {{if $.SelPajak}}
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp $inv.PPN}}</span></div></td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp $inv.PPh21}}</span></div></td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp $inv.PPh22}}</span></div></td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp $inv.PPh23}}</span></div></td>
+          {{end}}
         </tr>
         {{else}}
-        <tr><td colspan="5" class="text-center text-muted">Belum ada tagihan.</td></tr>
+        <tr><td colspan="{{.ColCount}}" class="text-center text-muted">Belum ada tagihan.</td></tr>
         {{end}}
       </tbody>
       <tfoot class="table-light fw-bold">
         <tr>
-          <td colspan="4" class="text-end">TOTAL</td>
+          <td colspan="{{.MergeCols}}" class="text-end">TOTAL</td>
+          {{if .HasDist}}
+          {{range $j, $c := .DistCols}}<td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp (index $.DistTotals $j)}}</span></div></td>{{end}}
+          {{else}}
           <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .Total}}</span></div></td>
+          {{end}}
+          {{if .SelPajak}}
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .TotalPPN}}</span></div></td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .TotalPPh21}}</span></div></td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .TotalPPh22}}</span></div></td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .TotalPPh23}}</span></div></td>
+          {{end}}
         </tr>
       </tfoot>
     </table>

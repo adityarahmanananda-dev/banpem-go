@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -233,12 +234,12 @@ func (s *Server) buildRekapPajak(ctx context.Context, b *store.Bantuan, tglCetak
 		{Header: "NTB", Width: 20, ExWidth: 18, Wrap: true, Flex: true, Top: true},
 		{Header: "NTPN", Width: 20, ExWidth: 18, Wrap: true, Flex: true, Top: true},
 		{Header: "Uraian", Width: 70, ExWidth: 45, Wrap: true, Flex: true},
-		{Header: "Bruto", Width: 25, ExWidth: 18, Num: true},
+		{Header: "Nominal (Rp)", Width: 25, ExWidth: 18, Num: true},
 		{Header: "PPN", Width: 22, ExWidth: 16, Num: true},
 		{Header: "PPh 21", Width: 22, ExWidth: 16, Num: true},
 		{Header: "PPh 22", Width: 22, ExWidth: 16, Num: true},
 		{Header: "PPh 23", Width: 22, ExWidth: 16, Num: true},
-		{Header: "Total Pajak", Width: 26, ExWidth: 18, Num: true},
+		{Header: "Penyetoran", Width: 26, ExWidth: 18, Num: true},
 	}
 	rep := export.Report{
 		Title:      "REKAP PAJAK",
@@ -521,38 +522,393 @@ func letterLower(n int) string {
 	return string(rune('a' + n - 1))
 }
 
+// rekapPenggunaanOpts berisi pilihan kolom tambahan Rekap Penggunaan Dana.
+type rekapPenggunaanOpts struct {
+	Kegiatan  bool
+	SubKeg    bool
+	Aktivitas bool
+	Komponen  bool
+	Pajak     bool
+}
+
+// rekapPenggunaanOptsFromQuery membaca pilihan kolom dari query string
+// (nilai "1" = tampil). Dipakai halaman web & export.
+func rekapPenggunaanOptsFromQuery(q url.Values) rekapPenggunaanOpts {
+	return rekapPenggunaanOpts{
+		Kegiatan:  q.Get("kegiatan") == "1",
+		SubKeg:    q.Get("sub_kegiatan") == "1",
+		Aktivitas: q.Get("aktivitas") == "1",
+		Komponen:  q.Get("komponen") == "1",
+		Pajak:     q.Get("pajak") == "1",
+	}
+}
+
+// rekapPenggunaanDistCols mengembalikan kolom angka distribusi untuk level
+// yang dipilih: satu kolom per nilai kegiatan/sub kegiatan/aktivitas/komponen
+// di anggaran (urutan RAB).
+func rekapPenggunaanDistCols(data store.RekapPenggunaanData, opts rekapPenggunaanOpts) []store.RekapPenggunaanCol {
+	var out []store.RekapPenggunaanCol
+	for _, c := range data.Cols {
+		sel := (c.Level == "kegiatan" && opts.Kegiatan) ||
+			(c.Level == "sub" && opts.SubKeg) ||
+			(c.Level == "aktivitas" && opts.Aktivitas) ||
+			(c.Level == "komponen" && opts.Komponen)
+		if sel {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// rekapSelLevels mengembalikan indeks level yang dipilih, terurut naik sesuai
+// hierarki RAB: 0=kegiatan, 1=sub, 2=aktivitas, 3=komponen.
+func rekapSelLevels(opts rekapPenggunaanOpts) []int {
+	var out []int
+	if opts.Kegiatan {
+		out = append(out, 0)
+	}
+	if opts.SubKeg {
+		out = append(out, 1)
+	}
+	if opts.Aktivitas {
+		out = append(out, 2)
+	}
+	if opts.Komponen {
+		out = append(out, 3)
+	}
+	return out
+}
+
+// rekapLevelNames nama level sesuai indeks pada hierarki RAB.
+var rekapLevelNames = []string{"kegiatan", "sub", "aktivitas", "komponen"}
+
+// rekapHeaderNode adalah simpul pohon header distribusi: satu nilai kegiatan/
+// sub kegiatan/aktivitas/komponen beserta anak-anaknya pada level lebih dalam
+// yang dipilih.
+type rekapHeaderNode struct {
+	Level    string
+	Name     string
+	Children []rekapHeaderNode
+}
+
+// rabItem mewakili satu nilai hierarki RAB (kegiatan -> sub -> aktivitas ->
+// komponen).
+type rabItem struct {
+	name     string
+	subItems []rabItem
+}
+
+// buildRABItems mengubah pohon RAB menjadi rabItem.
+func buildRABItems(tree []store.KegiatanTree) []rabItem {
+	var out []rabItem
+	for _, k := range tree {
+		var subs []rabItem
+		for _, sk := range k.Subs {
+			var acts []rabItem
+			for _, a := range sk.Aktivitass {
+				var kos []rabItem
+				for _, ko := range a.Komponens {
+					kos = append(kos, rabItem{name: ko.Nama})
+				}
+				acts = append(acts, rabItem{name: a.Nama, subItems: kos})
+			}
+			subs = append(subs, rabItem{name: sk.Nama, subItems: acts})
+		}
+		out = append(out, rabItem{name: k.Nama, subItems: subs})
+	}
+	return out
+}
+
+// buildRekapHeaderTree membangun pohon header dari rabItem, hanya memuat
+// level yang dipilih (selIdx). Level tak dipilih dilompati (anak-nya naik ke
+// level atas). Daun pohon = nilai pada level terdalam yang dipilih.
+func buildRekapHeaderTree(items []rabItem, level int, selIdx []int) []rekapHeaderNode {
+	var out []rekapHeaderNode
+	for _, it := range items {
+		if containsInt(selIdx, level) {
+			n := rekapHeaderNode{Level: rekapLevelNames[level], Name: it.name}
+			if level < 3 {
+				n.Children = buildRekapHeaderTree(it.subItems, level+1, selIdx)
+			}
+			out = append(out, n)
+		} else if level < 3 {
+			out = append(out, buildRekapHeaderTree(it.subItems, level+1, selIdx)...)
+		}
+	}
+	return out
+}
+
+func containsInt(s []int, v int) bool {
+	for _, x := range s {
+		if x == v {
+			return true
+		}
+	}
+	return false
+}
+
+// rekapHeaderLeaves mengumpulkan daun pohon header (urutan DFS = urutan kolom).
+func rekapHeaderLeaves(nodes []rekapHeaderNode) []rekapHeaderNode {
+	var out []rekapHeaderNode
+	var walk func([]rekapHeaderNode)
+	walk = func(ns []rekapHeaderNode) {
+		for _, n := range ns {
+			if len(n.Children) == 0 {
+				out = append(out, n)
+			} else {
+				walk(n.Children)
+			}
+		}
+	}
+	walk(nodes)
+	return out
+}
+
+// rekapNodesAtDepth meratakan simpul pohon pada kedalaman tertentu.
+func rekapNodesAtDepth(nodes []rekapHeaderNode, depth int) []rekapHeaderNode {
+	if depth == 0 {
+		return nodes
+	}
+	var out []rekapHeaderNode
+	for _, n := range nodes {
+		out = append(out, rekapNodesAtDepth(n.Children, depth-1)...)
+	}
+	return out
+}
+
+// rekapCountLeaves menghitung jumlah daun di bawah satu simpul.
+func rekapCountLeaves(n *rekapHeaderNode) int {
+	if len(n.Children) == 0 {
+		return 1
+	}
+	c := 0
+	for i := range n.Children {
+		c += rekapCountLeaves(&n.Children[i])
+	}
+	return c
+}
+
+// buildRekapHeaderRows menyusun header berjenjang Rekap Penggunaan Dana.
+// Baris 0 memuat grup utama (No, Kuitansi, Keperluan, "Nominal (Rp)", Pajak),
+// baris-baris berikut memuat level distribusi sesuai selCount, baris terakhir
+// = daun (kolom angka). Setiap baris menutupi seluruh kolom; sel Rowspan=0
+// adalah lanjutan dari baris di atas.
+func buildRekapHeaderRows(selCount int, tree []rekapHeaderNode, hasPajak bool) [][]export.HeaderCell {
+	depth := 2
+	if selCount > 0 {
+		depth = selCount + 1
+	}
+	leaves := rekapHeaderLeaves(tree)
+	nomSpan := len(leaves)
+	if selCount == 0 {
+		nomSpan = 1
+	}
+	total := 4 + nomSpan
+	if hasPajak {
+		total += 4
+	}
+	cont := func() export.HeaderCell { return export.HeaderCell{Colspan: 1, Rowspan: -1} }
+
+	rows := make([][]export.HeaderCell, depth)
+	for ri := 0; ri < depth; ri++ {
+		row := make([]export.HeaderCell, 0, total)
+
+		// kolom No
+		if ri == 0 {
+			row = append(row, export.HeaderCell{Text: "No", Colspan: 1, Rowspan: depth})
+		} else {
+			row = append(row, cont())
+		}
+
+		// kolom 1-2: Kuitansi -> No. Bukti / Tanggal
+		if ri == 0 {
+			row = append(row, export.HeaderCell{Text: "Kuitansi", Colspan: 2, Rowspan: 1})
+		} else if ri == 1 {
+			row = append(row,
+				export.HeaderCell{Text: "No. Bukti Dokumen", Colspan: 1, Rowspan: depth - 1},
+				export.HeaderCell{Text: "Tanggal Bukti Dokumen", Colspan: 1, Rowspan: depth - 1},
+			)
+		} else {
+			row = append(row, cont(), cont())
+		}
+
+		// kolom Keperluan Pembayaran
+		if ri == 0 {
+			row = append(row, export.HeaderCell{Text: "Keperluan Pembayaran", Colspan: 1, Rowspan: depth})
+		} else {
+			row = append(row, cont())
+		}
+
+		// kolom nominal: "Nominal (Rp.)" tunggal atau pohon distribusi
+		if selCount == 0 {
+			if ri == 0 {
+				row = append(row, export.HeaderCell{Text: "Nominal (Rp.)", Colspan: 1, Rowspan: depth})
+			} else {
+				row = append(row, cont())
+			}
+		} else if ri == 0 {
+			row = append(row, export.HeaderCell{Text: "Nominal (Rp)", Colspan: nomSpan, Rowspan: 1})
+		} else {
+			li := ri - 1
+			if li < selCount {
+				for _, n := range rekapNodesAtDepth(tree, li) {
+					if li == selCount-1 {
+						row = append(row, export.HeaderCell{Text: n.Name, Colspan: 1, Rowspan: 1})
+					} else {
+						row = append(row, export.HeaderCell{Text: n.Name, Colspan: rekapCountLeaves(&n), Rowspan: 1})
+					}
+				}
+			} else {
+				for i := 0; i < nomSpan; i++ {
+					row = append(row, cont())
+				}
+			}
+		}
+
+		// kolom pajak
+		if hasPajak {
+			if ri == 0 {
+				row = append(row, export.HeaderCell{Text: "Pajak Yang Dipungut dan Disetorkan (Rp)", Colspan: 4, Rowspan: 1})
+			} else if ri == 1 {
+				row = append(row,
+					export.HeaderCell{Text: "PPN", Colspan: 1, Rowspan: depth - 1},
+					export.HeaderCell{Text: "PPh 21", Colspan: 1, Rowspan: depth - 1},
+					export.HeaderCell{Text: "PPh 22", Colspan: 1, Rowspan: depth - 1},
+					export.HeaderCell{Text: "PPh 23", Colspan: 1, Rowspan: depth - 1},
+				)
+			} else {
+				row = append(row, cont(), cont(), cont(), cont())
+			}
+		}
+		rows[ri] = row
+	}
+	return rows
+}
+
+// rekapDistColsData menentukan kolom distribusi (daun) dan konfigurasi header
+// untuk Rekap Penggunaan Dana. Bila memilih 2+ level, header memakai HeaderRows
+// berjenjang; selain itu memakai ColGroups.
+func (s *Server) rekapDistColsData(data store.RekapPenggunaanData, opts rekapPenggunaanOpts) (cols []store.RekapPenggunaanCol, headerRows [][]export.HeaderCell, colGroups []export.ColGroup) {
+	sel := rekapSelLevels(opts)
+	switch {
+	case len(sel) >= 2:
+		tree := buildRekapHeaderTree(buildRABItems(data.Tree), 0, sel)
+		leaves := rekapHeaderLeaves(tree)
+		for _, leaf := range leaves {
+			cols = append(cols, store.RekapPenggunaanCol{Level: leaf.Level, Name: leaf.Name})
+		}
+		headerRows = buildRekapHeaderRows(len(sel), tree, opts.Pajak)
+	case len(sel) == 1:
+		cols = rekapPenggunaanDistCols(data, opts)
+		colGroups = []export.ColGroup{
+			{Header: "KUITANSI", Start: 1, Span: 2},
+			{Header: "NILAI NOMINAL (Rp)", Start: 4, Span: len(cols)},
+		}
+	default:
+		colGroups = []export.ColGroup{{Header: "KUITANSI", Start: 1, Span: 2}}
+	}
+	return
+}
+
 // buildRekapPenggunaanDana membuat laporan Rekapitulasi Penggunaan Dana:
-// per tagihan ditampilkan No. Bukti, tanggal bukti, keperluan (uraian) dan
-// nominal, dengan baris TOTAL dan tanda tangan. Kolom No. Bukti & Tanggal
-// berada di bawah grup header "Kuitansi".
-func (s *Server) buildRekapPenggunaanDana(ctx context.Context, b *store.Bantuan, tglCetak time.Time) (export.Report, error) {
-	invoices, err := s.Store.ListInvoices(ctx, b.ID, "sort")
+// per tagihan ditampilkan No. Bukti, tanggal, keperluan, lalu kolom angka.
+// Bila ada level distribusi dipilih (kegiatan/sub kegiatan/aktivitas/komponen),
+// dibuat kolom per nilai anggaran yang diisi nominal tagihan (kolom Nominal
+// tunggal diganti). Memilih 2+ level menghasilkan header berjenjang (mis.
+// Nominal (Rp) -> Kegiatan -> Aktivitas). Kolom pajak (PPN, PPh 21/22/23)
+// tampil bila dipilih. Baris TOTAL menjumlahkan tiap kolom angka.
+func (s *Server) buildRekapPenggunaanDana(ctx context.Context, b *store.Bantuan, tglCetak time.Time, opts rekapPenggunaanOpts) (export.Report, error) {
+	data, err := s.Store.ListRekapPenggunaan(ctx, b.ID)
 	if err != nil {
 		return export.Report{}, err
 	}
+	dist, headerRows, colGroups := s.rekapDistColsData(data, opts)
+
 	cols := []export.Col{
 		{Header: "No", Width: 8.7, ExWidth: 6, Center: true},
 		{Header: "No. Bukti Dokumen", Width: 32, ExWidth: 15, Wrap: true, MaxWidth: 32},
 		{Header: "Tanggal Bukti Dokumen", Width: 26, ExWidth: 14, Center: true, MaxWidth: 26},
-		{Header: "Keperluan Pembayaran", Width: 120, ExWidth: 55, Wrap: true, Flex: true, Left: true},
-		{Header: "Nominal", Width: 26, ExWidth: 18, Num: true, Money: true},
+		{Header: "Keperluan Pembayaran", Width: 90, ExWidth: 55, Wrap: true, Flex: true, Left: true},
+	}
+	for _, c := range dist {
+		cols = append(cols, export.Col{Header: c.Name, Width: 30, ExWidth: 14, Wrap: true, Num: true, Money: true, Flex: true})
+	}
+	if len(dist) == 0 {
+		cols = append(cols, export.Col{Header: "Nominal (Rp.)", Width: 26, ExWidth: 18, Num: true, Money: true, MaxWidth: 26})
+	}
+	if opts.Pajak {
+		cols = append(cols,
+			export.Col{Header: "PPN", Width: 20, ExWidth: 14, MaxWidth: 20, Num: true, Money: true},
+			export.Col{Header: "PPh 21", Width: 20, ExWidth: 14, MaxWidth: 20, Num: true, Money: true},
+			export.Col{Header: "PPh 22", Width: 20, ExWidth: 14, MaxWidth: 20, Num: true, Money: true},
+			export.Col{Header: "PPh 23", Width: 20, ExWidth: 14, MaxWidth: 20, Num: true, Money: true},
+		)
+		if len(headerRows) == 0 {
+			colGroups = append(colGroups, export.ColGroup{
+				Header: "PAJAK YANG DIPUNGUT DAN DISETORKAN (Rp)", Start: 4 + len(dist), Span: 4,
+			})
+		}
 	}
 	rep := export.Report{
 		Title:      "REKAPITULASI PENGGUNAAN DANA",
 		Subtitle:   b.Nama,
 		Cols:       cols,
-		ColGroups:  []export.ColGroup{{Header: "KUITANSI", Start: 1, Span: 2}},
+		ColGroups:  colGroups,
+		HeaderRows: headerRows,
 		TotalMerge: 4,
 		Sig:        sigData(b, tglCetak),
 	}
-	var total int64
-	for i, inv := range invoices {
-		rep.Rows = append(rep.Rows, []any{
-			i + 1, inv.NomorBukti, tanggalID(inv.Tanggal), inv.Uraian, inv.Bruto,
-		})
-		total += inv.Bruto
+	if len(dist) > 0 || opts.Pajak {
+		rep.Landscape = true
 	}
-	rep.TotalRow = []any{"TOTAL", "", "", "", total}
+
+	var tPPN, tPPh21, tPPh22, tPPh23 int64
+	totals := make([]int64, len(dist))
+	for i, r := range data.Rows {
+		row := []any{i + 1, r.NomorBukti, tanggalID(r.Tanggal), r.Uraian}
+		if len(dist) > 0 {
+			for j, c := range dist {
+				v := r.Values[c.Level+"\x00"+c.Name]
+				row = append(row, v)
+				totals[j] += v
+			}
+		} else {
+			row = append(row, r.Bruto)
+		}
+		if opts.Pajak {
+			row = append(row, r.NilaiPPN, r.PPh21, r.PPh22, r.PPh23)
+			tPPN += r.NilaiPPN
+			tPPh21 += r.PPh21
+			tPPh22 += r.PPh22
+			tPPh23 += r.PPh23
+		}
+		rep.Rows = append(rep.Rows, row)
+	}
+
+	total := make([]any, len(cols))
+	total[0] = "TOTAL"
+	if len(dist) > 0 {
+		for j, v := range totals {
+			total[4+j] = v
+		}
+	} else {
+		var tb int64
+		for _, r := range data.Rows {
+			tb += r.Bruto
+		}
+		total[4] = tb
+	}
+	if opts.Pajak {
+		taxIdx := 4 + len(dist)
+		if taxIdx == 4 {
+			taxIdx = 5
+		}
+		total[taxIdx] = tPPN
+		total[taxIdx+1] = tPPh21
+		total[taxIdx+2] = tPPh22
+		total[taxIdx+3] = tPPh23
+	}
+	rep.TotalRow = total
 	return rep, nil
 }
 

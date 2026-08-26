@@ -59,8 +59,8 @@ func (s *Server) servePDF(w http.ResponseWriter, rep export.Report, filename str
 	w.Write(data)
 }
 
-func (s *Server) serveWord(w http.ResponseWriter, rep export.Report, filename string, landscape bool) {
-	data, err := export.WordBytes(rep, landscape)
+func (s *Server) serveWord(w http.ResponseWriter, rep export.Report, filename string, portrait bool) {
+	data, err := export.WordBytes(rep, !portrait)
 	if err != nil {
 		log.Println("export word:", err)
 		http.Error(w, "gagal membuat word", http.StatusInternalServerError)
@@ -299,7 +299,8 @@ func (s *Server) rekapPenggunaanDanaExport(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	tgl, _, _ := exportParams(r)
-	rep, err := s.buildRekapPenggunaanDana(r.Context(), &b, tgl)
+	opts := rekapPenggunaanOptsFromQuery(r.URL.Query())
+	rep, err := s.buildRekapPenggunaanDana(r.Context(), &b, tgl, opts)
 	if err != nil {
 		s.fail(w, r, err, "/")
 		return

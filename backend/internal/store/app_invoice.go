@@ -41,6 +41,24 @@ type InvoiceInput struct {
 	NomorBupotPPH        string
 	BiayaAdminDibebankan string
 	Realisasi            []RealisasiInput
+	// PPNOverride/PPHOverride membiarkan user mengoreksi hasil perhitungan
+	// pajak (mis. selisih pembulatan). Nilai pointer bila diisi dipakai
+	// menggantikan nilai PPN/PPh hasil hitung_pajak.
+	PPNOverride *int64
+	PPHOverride *int64
+}
+
+// hitungPajakEfektif menerapkan koreksi user (bila diisi) pada hasil hitung
+// pajak. Nilai PPN/PPh yang dikoreksi tetap menjaga bruto tidak berubah.
+func hitungPajakEfektif(in InvoiceInput, res tax.Result) (ppn, pph int64) {
+	ppn, pph = res.PPN, res.PPH
+	if in.PPNOverride != nil {
+		ppn = *in.PPNOverride
+	}
+	if in.PPHOverride != nil {
+		pph = *in.PPHOverride
+	}
+	return ppn, pph
 }
 
 func getBantuanQ(ctx context.Context, q Querier, id int64) (Bantuan, error) {
@@ -104,8 +122,9 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 			return err
 		}
 		res := tax.Hitung(in.Bruto, in.JenisMenu, in.FlagPpn, in.FlagPph, in.KategoriNarasumber)
+		ppn, pph := hitungPajakEfektif(in, res)
 		admin := AdminFee(b.Bank, in.Bank)
-		nettoFinal := res.Netto - admin
+		nettoFinal := in.Bruto - ppn - pph - admin
 
 		var sortOrder int
 		if err := tx.QueryRow(ctx, `SELECT COALESCE(MAX(sort_order),0) FROM trx_invoice WHERE bantuan_id=$1`, bantuanID).Scan(&sortOrder); err != nil {
@@ -129,13 +148,13 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 			RETURNING id`,
 			bantuanID, in.Tanggal, in.NomorBukti, in.Uraian, in.Bruto, in.JenisMenu,
 			in.FlagPpn, in.FlagPph, in.KategoriNarasumber, res.DPP, res.DPPNilaiLain,
-			res.PPN, res.PPH, jenisPPH, nettoFinal, in.NamaRekening, in.NomorRekening,
+			ppn, pph, jenisPPH, nettoFinal, in.NamaRekening, in.NomorRekening,
 			in.Bank, in.NPWP, in.NomorBupotPPN, in.NomorBupotPPH, in.BiayaAdminDibebankan,
 			sortOrder).Scan(&iid)
 		if err != nil {
 			return err
 		}
-		if err := saveRealisasi(ctx, tx, iid, in.Realisasi, res.PPN, res.PPH); err != nil {
+		if err := saveRealisasi(ctx, tx, iid, in.Realisasi, ppn, pph); err != nil {
 			return err
 		}
 		iidPtr := iid
@@ -148,19 +167,19 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 		}); err != nil {
 			return err
 		}
-		if res.PPN > 0 {
+		if ppn > 0 {
 			if _, err := AppendBKULedger(ctx, tx, LedgerEntry{
 				BantuanID: bantuanID, Tanggal: &tgl, NomorBukti: in.NomorBupotPPN,
-				Uraian: "Pemungutan PPN atas " + in.Uraian, Debit: 0, Kredit: res.PPN,
+				Uraian: "Pemungutan PPN atas " + in.Uraian, Debit: 0, Kredit: ppn,
 				InvoiceID: &iidPtr, JenisTransaksi: "pungut_ppn",
 			}); err != nil {
 				return err
 			}
 		}
-		if res.PPH > 0 {
+		if pph > 0 {
 			if _, err := AppendBKULedger(ctx, tx, LedgerEntry{
 				BantuanID: bantuanID, Tanggal: &tgl, NomorBukti: in.NomorBupotPPH,
-				Uraian: "Pemungutan " + jenisPPH + " atas " + in.Uraian, Debit: 0, Kredit: res.PPH,
+				Uraian: "Pemungutan " + jenisPPH + " atas " + in.Uraian, Debit: 0, Kredit: pph,
 				InvoiceID: &iidPtr, JenisTransaksi: "pungut_pph",
 			}); err != nil {
 				return err
@@ -168,7 +187,7 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 		}
 
 		// Entri Bank
-		nettoBank := in.Bruto - res.PPN - res.PPH - admin
+		nettoBank := in.Bruto - ppn - pph - admin
 		if _, err := AppendBankLedger(ctx, tx, LedgerEntry{
 			BantuanID: bantuanID, Tanggal: &tgl, NomorBukti: in.NomorBukti, Uraian: in.Uraian,
 			Debit: nettoBank, Kredit: 0, InvoiceID: &iidPtr, JenisTransaksi: "pembayaran",
@@ -217,8 +236,9 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 		}
 
 		res := tax.Hitung(in.Bruto, in.JenisMenu, in.FlagPpn, in.FlagPph, in.KategoriNarasumber)
+		ppn, pph := hitungPajakEfektif(in, res)
 		admin := AdminFee(b.Bank, in.Bank)
-		nettoFinal := res.Netto - admin
+		nettoFinal := in.Bruto - ppn - pph - admin
 		jenisPPH := ""
 		if res.JenisPPH != nil {
 			jenisPPH = *res.JenisPPH
@@ -230,12 +250,12 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 			bank=$17, npwp=$18, nomor_bupot_ppn=$19, nomor_bupot_pph=$20, biaya_admin_dibebankan=$21
 			WHERE id=$22`,
 			in.Tanggal, in.NomorBukti, in.Uraian, in.Bruto, in.JenisMenu, in.FlagPpn,
-			in.FlagPph, in.KategoriNarasumber, res.DPP, res.DPPNilaiLain, res.PPN,
-			res.PPH, jenisPPH, nettoFinal, in.NamaRekening, in.NomorRekening,
+			in.FlagPph, in.KategoriNarasumber, res.DPP, res.DPPNilaiLain, ppn,
+			pph, jenisPPH, nettoFinal, in.NamaRekening, in.NomorRekening,
 			in.Bank, in.NPWP, in.NomorBupotPPN, in.NomorBupotPPH, in.BiayaAdminDibebankan, iid); err != nil {
 			return err
 		}
-		if err := saveRealisasi(ctx, tx, iid, in.Realisasi, res.PPN, res.PPH); err != nil {
+		if err := saveRealisasi(ctx, tx, iid, in.Realisasi, ppn, pph); err != nil {
 			return err
 		}
 		iidPtr := iid
@@ -246,25 +266,25 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 		}); err != nil {
 			return err
 		}
-		if res.PPN > 0 {
+		if ppn > 0 {
 			if _, err := AppendBKULedger(ctx, tx, LedgerEntry{
 				BantuanID: inv.BantuanID, Tanggal: &tgl, NomorBukti: in.NomorBupotPPN,
-				Uraian: "Pemungutan PPN atas " + in.Uraian, Debit: 0, Kredit: res.PPN,
+				Uraian: "Pemungutan PPN atas " + in.Uraian, Debit: 0, Kredit: ppn,
 				InvoiceID: &iidPtr, JenisTransaksi: "pungut_ppn",
 			}); err != nil {
 				return err
 			}
 		}
-		if res.PPH > 0 {
+		if pph > 0 {
 			if _, err := AppendBKULedger(ctx, tx, LedgerEntry{
 				BantuanID: inv.BantuanID, Tanggal: &tgl, NomorBukti: in.NomorBupotPPH,
-				Uraian: "Pemungutan " + jenisPPH + " atas " + in.Uraian, Debit: 0, Kredit: res.PPH,
+				Uraian: "Pemungutan " + jenisPPH + " atas " + in.Uraian, Debit: 0, Kredit: pph,
 				InvoiceID: &iidPtr, JenisTransaksi: "pungut_pph",
 			}); err != nil {
 				return err
 			}
 		}
-		nettoBank := in.Bruto - res.PPN - res.PPH - admin
+		nettoBank := in.Bruto - ppn - pph - admin
 		if _, err := AppendBankLedger(ctx, tx, LedgerEntry{
 			BantuanID: inv.BantuanID, Tanggal: &tgl, NomorBukti: in.NomorBukti, Uraian: in.Uraian,
 			Debit: nettoBank, Kredit: 0, InvoiceID: &iidPtr, JenisTransaksi: "pembayaran",
@@ -420,6 +440,140 @@ func (s *Store) ListBelanja(ctx context.Context, bantuanID int64) ([]BelanjaRow,
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// RekapPenggunaanCol adalah satu kolom angka distribusi: nilai kegiatan/sub
+// kegiatan/aktivitas/komponen di anggaran yang menjadi kolom tersendiri.
+type RekapPenggunaanCol struct {
+	Level string // "kegiatan" | "sub" | "aktivitas" | "komponen"
+	Name  string
+}
+
+// RekapPenggunaanRow adalah satu baris Rekap Penggunaan Dana (per tagihan).
+// Values memetakan Level+"\x00"+Nama ke nominal bruto tagihan pada nilai itu.
+type RekapPenggunaanRow struct {
+	ID         int64
+	Tanggal    time.Time
+	NomorBukti string
+	Uraian     string
+	Bruto      int64
+	NilaiPPN   int64
+	PPh21      int64
+	PPh22      int64
+	PPh23      int64
+	Values     map[string]int64
+}
+
+// RekapPenggunaanData berisi kolom distribusi (dari anggaran) + baris per
+// tagihan untuk Rekap Penggunaan Dana.
+type RekapPenggunaanData struct {
+	Tree []KegiatanTree
+	Cols []RekapPenggunaanCol
+	Rows []RekapPenggunaanRow
+}
+
+// ListRekapPenggunaan menyusun data Rekap Penggunaan Dana: kolom distribusi
+// diambil dari hierarki anggaran (kegiatan/sub kegiatan/aktivitas/komponen)
+// dengan urutan RAB, sedangkan nilai tiap sel = bruto realisasi tagihan pada
+// nilai tersebut. Tagihan tanpa realisasi tetap tampil (nilai 0).
+func (s *Store) ListRekapPenggunaan(ctx context.Context, bantuanID int64) (RekapPenggunaanData, error) {
+	var out RekapPenggunaanData
+	tree, err := s.ListKegiatanTree(ctx, bantuanID)
+	if err != nil {
+		return out, err
+	}
+	out.Tree = tree
+	addCol := func(level, name string) {
+		if name == "" {
+			return
+		}
+		for _, c := range out.Cols {
+			if c.Level == level && c.Name == name {
+				return
+			}
+		}
+		out.Cols = append(out.Cols, RekapPenggunaanCol{Level: level, Name: name})
+	}
+	for _, k := range tree {
+		addCol("kegiatan", k.Nama)
+		for _, sk := range k.Subs {
+			addCol("sub", sk.Nama)
+			for _, a := range sk.Aktivitass {
+				addCol("aktivitas", a.Nama)
+				for _, ko := range a.Komponens {
+					addCol("komponen", ko.Nama)
+				}
+			}
+		}
+	}
+
+	rows, err := s.Pool.Query(ctx, `SELECT i.id, i.tanggal, i.nomor_bukti, i.uraian, i.bruto,
+		COALESCE(k.nama,''), COALESCE(sk.nama,''), COALESCE(a.nama,''), COALESCE(ko.nama,''),
+		COALESCE(r.bruto,0), COALESCE(i.nilai_ppn,0), COALESCE(i.nilai_pph,0), COALESCE(i.jenis_pph,'')
+		FROM trx_invoice i
+		LEFT JOIN trx_invoice_realisasi r ON r.invoice_id = i.id
+		LEFT JOIN komponen ko ON ko.id = r.komponen_id
+		LEFT JOIN aktivitas a ON a.id = ko.aktivitas_id
+		LEFT JOIN sub_kegiatan sk ON sk.id = a.sub_kegiatan_id
+		LEFT JOIN kegiatan k ON k.id = sk.kegiatan_id
+		WHERE i.bantuan_id=$1
+		ORDER BY i.sort_order, i.id, ko.id`, bantuanID)
+	if err != nil {
+		return out, err
+	}
+	defer rows.Close()
+	var last *RekapPenggunaanRow
+	for rows.Next() {
+		var id int64
+		var tgl time.Time
+		var bukti, uraian, kegiatan, sub, aktivitas, komponen string
+		var invBruto, rBruto, ppn, pph int64
+		var jenisPPH string
+		if err := rows.Scan(&id, &tgl, &bukti, &uraian, &invBruto,
+			&kegiatan, &sub, &aktivitas, &komponen, &rBruto, &ppn, &pph, &jenisPPH); err != nil {
+			return out, err
+		}
+		if last == nil || last.ID != id {
+			rw := RekapPenggunaanRow{
+				ID: id, Tanggal: tgl, NomorBukti: bukti, Uraian: uraian,
+				Bruto: invBruto, NilaiPPN: ppn, Values: map[string]int64{},
+			}
+			setPPhValues(&rw, jenisPPH, pph)
+			out.Rows = append(out.Rows, rw)
+			last = &out.Rows[len(out.Rows)-1]
+		}
+		if rBruto > 0 {
+			if kegiatan != "" {
+				last.Values["kegiatan\x00"+kegiatan] += rBruto
+			}
+			if sub != "" {
+				last.Values["sub\x00"+sub] += rBruto
+			}
+			if aktivitas != "" {
+				last.Values["aktivitas\x00"+aktivitas] += rBruto
+			}
+			if komponen != "" {
+				last.Values["komponen\x00"+komponen] += rBruto
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return out, err
+	}
+	return out, nil
+}
+
+// setPPhValues menempatkan nilai PPh ke PPh 21/22/23 sesuai jenis_pph.
+func setPPhValues(r *RekapPenggunaanRow, jenis string, val int64) {
+	if strings.Contains(jenis, "21") {
+		r.PPh21 = val
+	}
+	if strings.Contains(jenis, "22") {
+		r.PPh22 = val
+	}
+	if strings.Contains(jenis, "23") {
+		r.PPh23 = val
+	}
 }
 
 // SetInvoiceOrder menyimpan urutan invoice (drag-and-drop rekap belanja).

@@ -12,19 +12,19 @@ import (
 // Layout dokumen resmi: margin ~18-20 mm, monokrom, font serif. Orientasi
 // A4 portrait (default) atau landscape (untuk laporan berkolom banyak).
 const (
-	pdfLeft   = 18.0
-	pdfRight  = 18.0
-	pdfTop    = 20.0
-	pdfBot    = 18.0
+	pdfLeft  = 18.0
+	pdfRight = 18.0
+	pdfTop   = 20.0
+	pdfBot   = 18.0
 
 	titleSize = 14.0
 	subSize   = 12.0
 	headSize  = 10.5
 	bodySize  = 10.0
 	footSize  = 11.0
-	minRowH   = 7.0  // ~20pt
-	cellPadX  = 1.8  // ~5pt
-	cellPadY  = 0.9  // ~2.5pt
+	minRowH   = 7.0 // ~20pt
+	cellPadX  = 1.8 // ~5pt
+	cellPadY  = 0.9 // ~2.5pt
 )
 
 func lineH(size float64) float64 { return size * 0.40 }
@@ -222,6 +222,10 @@ func (r *pdfRender) drawHeader(ws []float64, rep Report) {
 	x := pdfLeft
 	r.font("B", headSize)
 	lh := lineH(headSize)
+	if len(rep.HeaderRows) > 0 {
+		r.drawHeaderGrid(ws, rep.HeaderRows, y)
+		return
+	}
 	maxLines := 1
 	for i, c := range rep.Cols {
 		usable := ws[i] - 2*cellPadX
@@ -238,7 +242,19 @@ func (r *pdfRender) drawHeader(ws []float64, rep Report) {
 	// Baris grup header (mis. KUITANSI) di atas kolom. Kolom di luar grup
 	// digabung vertikal dengan header kolomnya (tinggi gh+hh).
 	if len(rep.ColGroups) > 0 {
-		gh := lh + 2*cellPadY
+		// tinggi baris grup mengikuti teks grup yang boleh membungkus agar
+		// tidak terpotong/bertumpuk dengan baris header kolom.
+		groupLines := 1
+		for _, g := range rep.ColGroups {
+			gw := 0.0
+			for j := g.Start; j < g.Start+g.Span && j < len(rep.Cols); j++ {
+				gw += ws[j]
+			}
+			if n := len(r.wrapText(g.Header, gw-2*cellPadX)); n > groupLines {
+				groupLines = n
+			}
+		}
+		gh := float64(groupLines)*lh + 2*cellPadY
 		if gh < minRowH {
 			gh = minRowH
 		}
@@ -305,6 +321,77 @@ func (r *pdfRender) drawHeader(ws []float64, rep Report) {
 		x += ws[i]
 	}
 	p.SetY(y + hh)
+}
+
+// drawHeaderGrid menggambar header berjenjang (HeaderRows): tiap baris dihitung
+// tingginya sesuai teks yang membungkus, sel digabung sesuai Colspan/Rowspan.
+func (r *pdfRender) drawHeaderGrid(ws []float64, rows [][]HeaderCell, y float64) {
+	p := r.p
+	lh := lineH(headSize)
+	n := len(ws)
+	xpos := make([]float64, n+1)
+	xpos[0] = pdfLeft
+	for i := 0; i < n; i++ {
+		xpos[i+1] = xpos[i] + ws[i]
+	}
+	R := len(rows)
+	hs := make([]float64, R)
+	for ri, row := range rows {
+		m := minRowH
+		col := 0
+		for _, cell := range row {
+			cs, rs := cell.Colspan, cell.Rowspan
+			if cs < 1 {
+				cs = 1
+			}
+			if rs < 1 {
+				rs = 1
+			}
+			if cell.Rowspan < 0 {
+				col += cs
+				continue
+			}
+			cw := xpos[col+cs] - xpos[col]
+			lines := r.wrapText(cell.Text, cw-2*cellPadX)
+			if len(lines) == 0 {
+				lines = []string{""}
+			}
+			if h := float64(len(lines))*lh + 2*cellPadY; h > m {
+				m = h
+			}
+			col += cs
+		}
+		hs[ri] = m
+	}
+	ys := make([]float64, R+1)
+	ys[0] = y
+	for i := 0; i < R; i++ {
+		ys[i+1] = ys[i] + hs[i]
+	}
+	for ri, row := range rows {
+		col := 0
+		for _, cell := range row {
+			cs, rs := cell.Colspan, cell.Rowspan
+			if cs < 1 {
+				cs = 1
+			}
+			if rs < 1 {
+				rs = 1
+			}
+			if cell.Rowspan < 0 {
+				col += cs
+				continue
+			}
+			x0 := xpos[col]
+			x1 := xpos[col+cs]
+			y0 := ys[ri]
+			y1 := ys[ri+rs]
+			p.Rect(x0, y0, x1-x0, y1-y0, "D")
+			r.drawHeaderText(cell.Text, x0, y0, x1-x0, y1-y0)
+			col += cs
+		}
+	}
+	p.SetY(ys[R])
 }
 
 // groupAt mengembalikan grup header yang mencakup kolom col (bila ada).
@@ -555,29 +642,53 @@ func (r *pdfRender) drawCell(cell any, col Col, i int, x, y, w, rh float64, bold
 }
 
 // drawMoney menggambar cell uang gaya pembukuan: "Rp." di kiri dan angka
-// menempel di kanan cell. Bila kolom terlalu sempit untuk keduanya, angka
-// ditulis menyatu dengan "Rp." rata kiri agar tidak terpotong/tumpang tindih.
+// menempel di kanan cell. Bila kolom terlalu sempit, font diperkecil agar
+// nilai tetap muat satu baris (tanpa tumpang tindih antar kolom).
 func (r *pdfRender) drawMoney(n int64, bold bool, x, y, w, rh float64) {
+	if w <= 4 {
+		return
+	}
+	amount := pdfAmount(n)
+	if amount == "" {
+		return // nilai 0 ditampilkan kosong
+	}
 	style := ""
 	if bold {
 		style = "B"
 	}
+	usable := w - 2*cellPadX
+	// coba ukuran penuh: "Rp." di kiri, angka menempel kanan.
 	r.font(style, bodySize)
 	lh := lineH(bodySize)
-	ly := y + (rh-lh)/2
-	amount := pdfAmount(n)
-	usable := w - 2*cellPadX
-	rpWidth := r.p.GetStringWidth("Rp.") + 2
+	rp := r.p.GetStringWidth("Rp.") + 2
 	aw := r.p.GetStringWidth(amount)
-	if rpWidth+aw > usable {
+	if rp+aw <= usable {
+		ly := y + (rh-lh)/2
 		r.p.SetXY(x+cellPadX, ly)
-		r.p.CellFormat(usable, lh, "Rp. "+amount, "", 0, "L", false, 0, "")
+		r.p.CellFormat(rp, lh, "Rp.", "", 0, "L", false, 0, "")
+		r.p.SetXY(x+w-cellPadX-aw, ly)
+		r.p.CellFormat(aw, lh, amount, "", 0, "L", false, 0, "")
 		return
 	}
+	// mengecilkan font sampai "Rp. amount" muat (rata kanan).
+	for _, text := range []string{"Rp. " + amount, amount} {
+		for size := bodySize - 0.5; size >= 6; size -= 0.5 {
+			r.font(style, size)
+			lh = lineH(size)
+			if r.p.GetStringWidth(text)+2*cellPadX <= w {
+				ly := y + (rh-lh)/2
+				r.p.SetXY(x, ly)
+				r.p.CellFormat(w, lh, text, "", 0, "R", false, 0, "")
+				return
+			}
+		}
+	}
+	// fallback terakhir: font minimal, tanpa Rp., rata kiri.
+	r.font(style, 6)
+	lh = lineH(6)
+	ly := y + (rh-lh)/2
 	r.p.SetXY(x+cellPadX, ly)
-	r.p.CellFormat(rpWidth, lh, "Rp.", "", 0, "L", false, 0, "")
-	r.p.SetXY(x+w-cellPadX-aw, ly)
-	r.p.CellFormat(aw, lh, amount, "", 0, "L", false, 0, "")
+	r.p.CellFormat(usable, lh, amount, "", 0, "L", false, 0, "")
 }
 
 // richLines memecah segmen cell kaya menjadi baris logis (berdasarkan \n).
@@ -775,4 +886,3 @@ func (r *pdfRender) drawSig(sig SigData, ws []float64) {
 	p.SetX(rightX)
 	p.CellFormat(half, 6, sig.NipRight, "", 2, "R", false, 0, "")
 }
-

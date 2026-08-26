@@ -139,6 +139,10 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("GET /bantuan/{id}/rekap-penggunaan-dana/export/pdf", s.handleRekapPenggunaanDanaExportPDF)
 	mux.HandleFunc("GET /bantuan/{id}/rekap-penggunaan-dana/export/word", s.handleRekapPenggunaanDanaExportWord)
 
+	mux.HandleFunc("GET /bantuan/{id}/bap-kas", s.handleBAPKas)
+	mux.HandleFunc("GET /bantuan/{id}/bap-kas/export/pdf", s.handleBAPKasExportPDF)
+	mux.HandleFunc("GET /bantuan/{id}/bap-kas/export/word", s.handleBAPKasExportWord)
+
 	mux.HandleFunc("GET /bantuan/{id}/kegiatan", s.handleKegiatan)
 	mux.HandleFunc("POST /bantuan/{id}/kegiatan/tambah", s.handleKegiatanTambah)
 	mux.HandleFunc("POST /bantuan/{id}/kegiatan/hapus/{kid}", s.handleKegiatanHapus)

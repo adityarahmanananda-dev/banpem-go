@@ -325,6 +325,21 @@ func (s *Store) DeleteJasaGiro(ctx context.Context, jgID int64) error {
 	})
 }
 
+// PajakBelumSetorAsOf menghitung pajak yang belum disetor pada tanggal
+// tertentu: pemungutan dari tagihan (nilai_ppn+nilai_pph) sampai tanggal itu
+// dikurangi penyetoran (entri setor_pajak) sampai tanggal itu.
+func (s *Store) PajakBelumSetorAsOf(ctx context.Context, bantuanID int64, tgl time.Time) int64 {
+	var pemungutan, setor int64
+	err := s.Pool.QueryRow(ctx, `SELECT
+		(SELECT COALESCE(SUM(nilai_ppn),0)+COALESCE(SUM(nilai_pph),0) FROM trx_invoice WHERE bantuan_id=$1 AND tanggal<=$2),
+		(SELECT COALESCE(SUM(debit),0) FROM trx_ledger WHERE bantuan_id=$1 AND jenis_transaksi='setor_pajak' AND tanggal<=$2)`,
+		bantuanID, tgl, tgl).Scan(&pemungutan, &setor)
+	if err != nil {
+		return 0
+	}
+	return pemungutan - setor
+}
+
 // TotalSetorPajak menjumlahkan debit entri setor_pajak.
 func (s *Store) TotalSetorPajak(ctx context.Context, bantuanID int64) int64 {
 	var v int64

@@ -128,6 +128,36 @@ func AppendBankLedger(ctx context.Context, q Querier, e LedgerEntry) (int64, err
 	return id, err
 }
 
+// SaldoAsOf menghitung saldo buku (bku/bank) pada tanggal tertentu dengan
+// aturan yang sama seperti RebuildLedger: saldo awal dipakai hanya bila entri
+// 'saldo_awal' sudah tercatat pada atau sebelum tanggal tersebut.
+func (s *Store) SaldoAsOf(ctx context.Context, bantuanID int64, table string, tgl time.Time) int64 {
+	sel := `SELECT jenis_transaksi, debit, kredit FROM trx_ledger WHERE bantuan_id=$1 AND tanggal<=$2 ORDER BY nomor, id`
+	if table == "bank" {
+		sel = `SELECT jenis_transaksi, debit, kredit FROM trx_bank_ledger WHERE bantuan_id=$1 AND tanggal<=$2 ORDER BY nomor, id`
+	}
+	base := SaldoAwalValue(ctx, s.Pool, bantuanID)
+	rows, err := s.Pool.Query(ctx, sel, bantuanID, tgl)
+	if err != nil {
+		return 0
+	}
+	defer rows.Close()
+	running := int64(0)
+	for rows.Next() {
+		var jenis string
+		var d, k int64
+		if err := rows.Scan(&jenis, &d, &k); err != nil {
+			return running
+		}
+		if jenis == "saldo_awal" {
+			running = base
+		} else {
+			running = running - d + k
+		}
+	}
+	return running
+}
+
 // ListLedger membaca semua entri suatu buku secara urut. table = "bku" | "bank".
 func ListLedger(ctx context.Context, q Querier, bantuanID int64, table string) ([]Ledger, error) {
 	var out []Ledger

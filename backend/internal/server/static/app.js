@@ -33,6 +33,23 @@
     document.querySelectorAll("[data-export-url]").forEach(function (link) {
       link.addEventListener("click", function (e) {
         e.preventDefault();
+        exportForm.querySelectorAll(".export-col-input").forEach(function (el) {
+          el.remove();
+        });
+        // Bawa pilihan kolom tambahan halaman (mis. rekap penggunaan dana)
+        // sebagai hidden input agar ikut dikirim saat export.
+        var params = new URLSearchParams(window.location.search);
+        ["kegiatan", "sub_kegiatan", "aktivitas", "komponen", "pajak"].forEach(function (name) {
+          var v = params.get(name);
+          if (v) {
+            var input = document.createElement("input");
+            input.type = "hidden";
+            input.name = name;
+            input.value = v;
+            input.className = "export-col-input";
+            exportForm.appendChild(input);
+          }
+        });
         exportForm.action = link.getAttribute("data-export-url");
         if (link.hasAttribute("data-versi")) {
           versiWrap.style.display = "";
@@ -116,6 +133,22 @@
   function moneyDisp(v) {
     return rupiahFromSen(Number(v || 0));
   }
+  function moneyPlain(v) {
+    v = Number(v || 0);
+    return formatThousands(String(Math.round(v / 100)));
+  }
+  function updateNetto() {
+    var bruto = document.getElementById("bruto");
+    var ppn = document.getElementById("pvPpn");
+    var pph = document.getElementById("pvPph");
+    var admin = document.getElementById("pvAdmin");
+    if (!bruto || !ppn || !pph || !admin) return;
+    var b = parseInt(digitsOnly(bruto.value) || "0", 10);
+    var p = parseInt(digitsOnly(ppn.value) || "0", 10);
+    var h = parseInt(digitsOnly(pph.value) || "0", 10);
+    var a = parseInt(admin.getAttribute("data-sen") || "0", 10);
+    document.getElementById("pvNetto").textContent = moneyDisp(b - p - h - a);
+  }
   function hitungPajak() {
     var bruto = document.getElementById("bruto");
     if (!bruto || !window.BANTUAN_ID) return;
@@ -133,11 +166,12 @@
       .then(function (res) {
         document.getElementById("pvDpp").textContent = moneyDisp(res.dpp);
         document.getElementById("pvDppNilai").textContent = moneyDisp(res.dpp_nilai_lain);
-        document.getElementById("pvPpn").textContent = moneyDisp(res.ppn);
+        document.getElementById("pvPpn").value = moneyPlain(res.ppn);
         document.getElementById("pvJenisPph").textContent = res.jenis_pph || "-";
-        document.getElementById("pvPph").textContent = moneyDisp(res.pph);
+        document.getElementById("pvPph").value = moneyPlain(res.pph);
         document.getElementById("pvAdmin").textContent = moneyDisp(res.biaya_admin);
-        document.getElementById("pvNetto").textContent = moneyDisp(res.netto_final);
+        document.getElementById("pvAdmin").setAttribute("data-sen", res.biaya_admin);
+        updateNetto();
       })
       .catch(function () {});
   }
@@ -151,7 +185,20 @@
       el.addEventListener("change", hitungPajak);
       el.addEventListener("input", hitungPajak);
     });
-    hitungPajak();
+    // Koreksi manual PPN/PPh ikut menghitung ulang netto.
+    ["pvPpn", "pvPph"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        el.addEventListener("input", updateNetto);
+        el.addEventListener("change", updateNetto);
+      }
+    });
+    if (window.IS_EDIT) {
+      // Saat edit, pertahankan nilai pajak tersimpan (bisa hasil koreksi).
+      updateNetto();
+    } else {
+      hitungPajak();
+    }
   }
 
   // ---- Tampilkan/menyembunyikan blok pajak berdasarkan jenis pengeluaran ----

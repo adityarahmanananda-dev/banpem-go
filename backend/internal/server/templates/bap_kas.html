@@ -1,0 +1,89 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-search"></i> Berita Acara Pemeriksaan Kas</h4>
+  <div class="d-flex gap-1">
+    <a class="btn btn-primary btn-sm" href="/bantuan/{{.Bantuan.ID}}/bap-kas/export/pdf?tanggal={{.Tanggal}}&uang_kertas={{.UangKertas}}&uang_logam={{.UangLogam}}"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
+    <a class="btn btn-primary btn-sm" href="/bantuan/{{.Bantuan.ID}}/bap-kas/export/word?tanggal={{.Tanggal}}&uang_kertas={{.UangKertas}}&uang_logam={{.UangLogam}}"><i class="bi bi-file-earmark-word"></i> Word</a>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-end mb-0">
+      <div class="col-md-4">
+        <label class="form-label">Tanggal Pemeriksaan</label>
+        <input type="date" class="form-control" name="tanggal" value="{{.Tanggal}}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Uang Kertas (Rp)</label>
+        <input type="text" class="form-control money-input" name="uang_kertas" value="{{.UangKertas}}">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Uang Logam (Rp)</label>
+        <input type="text" class="form-control money-input" name="uang_logam" value="{{.UangLogam}}">
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-outline-primary w-100"><i class="bi bi-arrow-repeat"></i> Tampilkan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+  .bap-sheet {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 20mm;
+    border: 1px solid #999;
+    box-sizing: border-box;
+    font-size: 12pt;
+    font-family: Arial, Helvetica, sans-serif;
+    line-height: 1.4;
+    background: #fff;
+  }
+  .bap-title { text-align: center; font-weight: 700; margin-bottom: 6mm; }
+  .bap-date { margin-bottom: 2mm; }
+  .bap-ident-row { margin-left: 6.4mm; white-space: nowrap; }
+  .bap-ident-label { display: inline-block; min-width: 41.2mm; }
+  .bap-par { margin: 2mm 0; }
+  .bap-money-row { margin-left: 12.7mm; white-space: nowrap; }
+  .bap-money-desc { display: inline-block; min-width: 107.3mm; }
+  .bap-money { display: inline-block; }
+  .bap-sig { margin-top: 14mm; }
+  .bap-sig-row { display: flex; }
+  .bap-sig-left { width: 50%; }
+  .bap-sig-right { width: 50%; text-align: right; }
+  .bap-sig-space { height: 20mm; }
+  .bap-sig-name { font-weight: 700; }
+</style>
+
+<div class="card">
+  <div class="card-body" style="overflow-x:auto">
+    <div class="bap-sheet">
+      <div class="bap-title">BERITA ACARA PEMERIKSAAN KAS</div>
+      <p class="bap-date mb-0">{{bapDateLine1 .Data.DateText}}<br>{{bapDateLine2 .Data.DateText}}</p>
+      <div class="bap-ident-row"><span class="bap-ident-label">Nama</span><span>: {{.Data.ExaminerName}}</span></div>
+      <div class="bap-ident-row"><span class="bap-ident-label">Jabatan</span><span>: {{.Data.ExaminerTitle}}</span></div>
+      <p class="bap-par">Selaku {{.Data.ExaminerTitle}} sebagai atasan langsung Bendahara<br>telah melakukan pemeriksaan setempat kepada</p>
+      <div class="bap-ident-row"><span class="bap-ident-label">Nama</span><span>: {{.Data.BendaharaName}}</span></div>
+      <div class="bap-ident-row"><span class="bap-ident-label">Jabatan</span><span>: {{.Data.BendaharaTitle}}</span></div>
+      <p class="bap-par">Berdasarkan hasil pemeriksaan bukti-bukti yang berada dalam pengawasan itu,<br>kami menemukan kenyataan sebagai berikut:</p>
+      <div class="bap-money-row"><span class="bap-money-desc">1. Uang kertas lembaran sejumlah</span><span class="bap-money">Rp {{bapAmount .Data.UangKertas}}</span></div>
+      <div class="bap-money-row"><span class="bap-money-desc">2. Uang logam sejumlah</span><span class="bap-money">Rp {{bapAmount .Data.UangLogam}}</span></div>
+      <div class="bap-money-row"><span class="bap-money-desc">3. Pajak yang belum disetor sejumlah</span><span class="bap-money">Rp {{bapAmount .Data.PajakBelum}}</span></div>
+      <div class="bap-money-row"><span class="bap-money-desc">4. Saldo pada Bank sejumlah</span><span class="bap-money" style="text-decoration:underline">Rp {{bapAmount .Data.SaldoBank}} +</span></div>
+      <div class="bap-money-row"><span class="bap-money-desc">5. Total</span><span class="bap-money">Rp {{bapAmount .Data.Total}}</span></div>
+      <div class="bap-money-row"><span class="bap-money-desc">6. Saldo uang menurut buku kas umum</span><span class="bap-money">Rp {{bapAmount .Data.SaldoBuku}}</span></div>
+      <div class="bap-money-row"><span class="bap-money-desc">Perbedaan antara KAS dan BUKU sejumlah</span><span class="bap-money">Rp {{bapAmount .Data.Perbedaan}}</span></div>
+
+      <div class="bap-sig">
+        <div class="bap-sig-row"><div class="bap-sig-left">{{.Data.ExaminerTitle}}</div><div class="bap-sig-right">{{.Data.BendaharaTitle}}</div></div>
+        <div class="bap-sig-space"></div>
+        <div class="bap-sig-row"><div class="bap-sig-left bap-sig-name">{{.Data.ExaminerName}}</div><div class="bap-sig-right bap-sig-name">{{.Data.BendaharaName}}</div></div>
+        <div class="bap-sig-row"><div class="bap-sig-left">NIP {{.Data.ExaminerNIP}}</div><div class="bap-sig-right">NIP {{.Data.BendaharaNIP}}</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+{{end}}

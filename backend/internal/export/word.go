@@ -160,9 +160,10 @@ func wordDocumentXML(rep Report, landscape bool) string {
 	}
 	b.WriteString("</w:tblGrid>")
 
-	// Baris grup header (berulang), mis. KUITANSI merangkum beberapa kolom.
-	// Kolom di luar grup digabung vertikal dengan header kolomnya.
-	if len(rep.ColGroups) > 0 {
+	// Baris-baris header: berjenjang (HeaderRows) atau grup + kolom (ColGroups).
+	if len(rep.HeaderRows) > 0 {
+		b.WriteString(wordHeaderRows(rep, twips))
+	} else if len(rep.ColGroups) > 0 {
 		cover := map[int]ColGroup{}
 		for _, g := range rep.ColGroups {
 			cover[g.Start] = g
@@ -190,24 +191,32 @@ func wordDocumentXML(rep Report, landscape bool) string {
 			}
 		}
 		b.WriteString("</w:tr>")
-	}
 
-	// Header kolom (berulang).
-	b.WriteString("<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>")
-	for i, c := range rep.Cols {
-		if len(rep.ColGroups) > 0 {
+		// Header kolom (berulang).
+		b.WriteString("<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>")
+		for i, c := range rep.Cols {
 			if _, ok := groupAt(rep.ColGroups, i); !ok {
 				// lanjutan gabung vertikal dari baris grup.
 				b.WriteString(wcell("", cellOpts{wTwips: twips[i], vMerge: "continue"}))
 				continue
 			}
+			b.WriteString(wcell(c.Header, cellOpts{
+				wTwips: twips[i], align: "center", bold: true,
+				fill: wordHeaderFill, color: "FFFFFF",
+			}))
 		}
-		b.WriteString(wcell(c.Header, cellOpts{
-			wTwips: twips[i], align: "center", bold: true,
-			fill: wordHeaderFill, color: "FFFFFF",
-		}))
+		b.WriteString("</w:tr>")
+	} else {
+		// Header kolom (berulang), tanpa grup.
+		b.WriteString("<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>")
+		for i, c := range rep.Cols {
+			b.WriteString(wcell(c.Header, cellOpts{
+				wTwips: twips[i], align: "center", bold: true,
+				fill: wordHeaderFill, color: "FFFFFF",
+			}))
+		}
+		b.WriteString("</w:tr>")
 	}
-	b.WriteString("</w:tr>")
 
 	// Baris data.
 	for i, row := range rep.Rows {
@@ -343,6 +352,43 @@ func wordColWidths(cols []Col, usableMM float64) []float64 {
 	return ws
 }
 
+// wordHeaderRows menulis baris-baris header berjenjang ke XML Word. Sel
+// Rowspan=0 menjadi vMerge continue (lanjutan sel dari baris di atas).
+func wordHeaderRows(rep Report, twips []int) string {
+	var b strings.Builder
+	for _, row := range rep.HeaderRows {
+		b.WriteString("<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>")
+		col := 0
+		for _, cell := range row {
+			cs := cell.Colspan
+			if cs < 1 {
+				cs = 1
+			}
+			tw := 0
+			for j := col; j < col+cs && j < len(twips); j++ {
+				tw += twips[j]
+			}
+			switch {
+			case cell.Rowspan < 0:
+				b.WriteString(wcell("", cellOpts{wTwips: tw, gridSpan: cs, vMerge: "continue"}))
+			case cell.Rowspan > 1:
+				b.WriteString(wcell(cell.Text, cellOpts{
+					wTwips: tw, align: "center", bold: true,
+					fill: wordHeaderFill, color: "FFFFFF", gridSpan: cs, keepNext: true, vMerge: "restart",
+				}))
+			default:
+				b.WriteString(wcell(cell.Text, cellOpts{
+					wTwips: tw, align: "center", bold: true,
+					fill: wordHeaderFill, color: "FFFFFF", gridSpan: cs, keepNext: true,
+				}))
+			}
+			col += cs
+		}
+		b.WriteString("</w:tr>")
+	}
+	return b.String()
+}
+
 // wordSignatureTable menyusun blok tanda tangan sebagai tabel terpisah tanpa
 // border (lebar mengikuti kolom tabel laporan).
 func wordSignatureTable(sig SigData, twips []int) string {
@@ -423,6 +469,7 @@ type cellOpts struct {
 	keepNext bool
 	noBorder bool
 	vMerge   string // "" | "restart" | "continue"
+	sz       int    // ukuran font dalam half-points; 0 = 18 (9pt)
 }
 
 func wcell(text string, o cellOpts) string {
@@ -462,7 +509,11 @@ func wcell(text string, o cellOpts) string {
 		if o.color != "" {
 			b.WriteString(fmt.Sprintf(`<w:color w:val="%s"/>`, o.color))
 		}
-		b.WriteString("<w:sz w:val=\"18\"/><w:szCs w:val=\"18\"/>")
+		sz := o.sz
+		if sz == 0 {
+			sz = 18
+		}
+		b.WriteString(fmt.Sprintf(`<w:sz w:val="%d"/><w:szCs w:val="%d"/>`, sz, sz))
 		b.WriteString("</w:rPr>")
 		b.WriteString(`<w:t xml:space="preserve">`)
 		for i, line := range strings.Split(text, "\n") {
@@ -521,8 +572,12 @@ func wcellRich(rich Rich, o cellOpts) string {
 }
 
 // wmoney menyusun cell uang gaya pembukuan: "Rp." menempel di kiri cell dan
-// angka menempel di kanan cell lewat tab stop rata kanan selebar cell.
+// angka menempel di kanan cell lewat tab stop rata kanan selebar cell. Nilai 0
+// ditampilkan "Rp." di kiri dan "-" di kanan (konvensi pembukuan).
 func wmoney(amount string, o cellOpts) string {
+	if amount == "0" {
+		amount = "-"
+	}
 	var b strings.Builder
 	b.WriteString("<w:tc>")
 	b.WriteString("<w:tcPr>")

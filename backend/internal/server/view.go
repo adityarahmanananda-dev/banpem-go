@@ -35,6 +35,24 @@ func funcMap() template.FuncMap {
 		},
 		"adminFee": store.AdminFee,
 		"join":     strings.Join,
+		"bapAmount": func(c int64) string {
+			if c == 0 {
+				return "-"
+			}
+			return money.FormatReport(c)
+		},
+		"bapDateLine1": func(s string) string {
+			if i := strings.LastIndex(s, " ini"); i > 0 {
+				return s[:i]
+			}
+			return s
+		},
+		"bapDateLine2": func(s string) string {
+			if i := strings.LastIndex(s, " ini"); i > 0 {
+				return s[i+1:]
+			}
+			return ""
+		},
 		"add": func(a, b int64) int64 { return a + b },
 		"sub": func(a, b int64) int64 { return a - b },
 		"inc": func(i int) int { return i + 1 },

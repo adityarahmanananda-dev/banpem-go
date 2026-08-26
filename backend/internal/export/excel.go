@@ -257,7 +257,74 @@ func ExcelBytes(r Report) ([]byte, error) {
 	// digabung vertikal dengan header kolomnya agar tidak ada sel kosong.
 	headerRow := 4
 	dataRow := 5
-	if len(r.ColGroups) > 0 {
+	if len(r.HeaderRows) > 0 {
+		// Header berjenjang (multi-baris). Latar seluruh sel area header,
+		// lalu gabungkan sel sesuai Colspan/Rowspan dan isi teksnya.
+		R := len(r.HeaderRows)
+		for rr := 4; rr < 4+R; rr++ {
+			for i := 1; i <= n; i++ {
+				if err := f.SetCellStyle(sheet, cellAt(i, rr), cellAt(i, rr), headerStyle); err != nil {
+					return nil, err
+				}
+			}
+		}
+		for ri, row := range r.HeaderRows {
+			col := 1
+			for _, cell := range row {
+				cs, rs := cell.Colspan, cell.Rowspan
+				if cs < 1 {
+					cs = 1
+				}
+				if rs < 1 {
+					rs = 1
+				}
+				if cell.Rowspan < 0 {
+					col += cs
+					continue
+				}
+				if cs > 1 || rs > 1 {
+					if err := f.MergeCell(sheet, cellAt(col, 4+ri), cellAt(col+cs-1, 4+ri+rs-1)); err != nil {
+						return nil, err
+					}
+				}
+				if err := f.SetCellValue(sheet, cellAt(col, 4+ri), cell.Text); err != nil {
+					return nil, err
+				}
+				col += cs
+			}
+		}
+		for ri, row := range r.HeaderRows {
+			h := 20.0
+			col := 1
+			for _, cell := range row {
+				cs := cell.Colspan
+				if cs < 1 {
+					cs = 1
+				}
+				if cell.Rowspan < 0 {
+					col += cs
+					continue
+				}
+				w := 0.0
+				for j := col - 1; j < col-1+cs && j < n; j++ {
+					cw := r.Cols[j].ExWidth
+					if cw <= 0 {
+						cw = r.Cols[j].Width
+					}
+					w += cw
+				}
+				if th := titleRowHeight(cell.Text, w); th > h {
+					h = th
+				}
+				col += cs
+			}
+			if err := f.SetRowHeight(sheet, 4+ri, h); err != nil {
+				return nil, err
+			}
+		}
+		headerRow = 4 + R - 1
+		dataRow = headerRow + 1
+	} else if len(r.ColGroups) > 0 {
 		cover := map[int]bool{}
 		for _, g := range r.ColGroups {
 			for j := g.Start; j < g.Start+g.Span; j++ {

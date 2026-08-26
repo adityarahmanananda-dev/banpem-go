@@ -4,7 +4,7 @@
   <a href="/bantuan/{{.Bantuan.ID}}/tagihan" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kembali</a>
 </div>
 
-<script>window.MASTER = {{jsonDump .Kegiatans}}; window.BANTUAN_ID = {{.Bantuan.ID}}; window.BANK_BANTUAN = {{jsonDump .Bantuan.Bank}};</script>
+<script>window.MASTER = {{jsonDump .Kegiatans}}; window.BANTUAN_ID = {{.Bantuan.ID}}; window.BANK_BANTUAN = {{jsonDump .Bantuan.Bank}}; window.IS_EDIT = {{.IsEdit}};</script>
 
 <form method="post" action="/bantuan/{{.Bantuan.ID}}/tagihan{{if .IsEdit}}/edit/{{.Inv.ID}}{{end}}" class="card">
   <div class="card-body">
@@ -124,9 +124,9 @@
         <div class="row g-1 small" id="taxPreview">
           <div class="col-6 col-md-2">DPP: <b id="pvDpp">-</b></div>
           <div class="col-6 col-md-3">DPP Nilai Lain: <b id="pvDppNilai">-</b></div>
-          <div class="col-6 col-md-2">PPN: <b id="pvPpn">-</b></div>
+          <div class="col-6 col-md-2">PPN: <input type="text" class="form-control form-control-sm money-input" name="ppn" id="pvPpn" value="{{if .Inv}}{{fmtMoneyNoRp .Inv.NilaiPPN}}{{end}}"></div>
           <div class="col-6 col-md-3">Jenis PPh: <b id="pvJenisPph">-</b></div>
-          <div class="col-6 col-md-2">PPh: <b id="pvPph">-</b></div>
+          <div class="col-6 col-md-2">PPh: <input type="text" class="form-control form-control-sm money-input" name="pph" id="pvPph" value="{{if .Inv}}{{fmtMoneyNoRp .Inv.NilaiPPH}}{{end}}"></div>
           <div class="col-6 col-md-2">Biaya Admin: <b id="pvAdmin">-</b></div>
           <div class="col-6 col-md-3">Netto: <b id="pvNetto">-</b></div>
         </div>

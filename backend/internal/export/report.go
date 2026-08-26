@@ -42,6 +42,16 @@ type ColGroup struct {
 	Span   int // jumlah kolom yang dicakup grup
 }
 
+// HeaderCell adalah satu sel pada header berjenjang (multi-baris). Colspan
+// dan Rowspan menentukan penggabungan sel. Rowspan=-1 menandakan sel penerus
+// dari baris di atas (teks kosong; di Word menjadi vMerge continue, di
+// Excel/PDF diabaikan karena gabungan sudah dibuat sel asal).
+type HeaderCell struct {
+	Text    string
+	Colspan int
+	Rowspan int
+}
+
 // RichSeg adalah satu segmen teks dalam cell kaya (rich text) dengan gaya tebal
 // tersendiri.
 type RichSeg struct {
@@ -77,6 +87,12 @@ type Report struct {
 	// ColGroups menambahkan baris header berkelompok di atas kolom (mis.
 	// "KUITANSI" merangkum beberapa kolom). Bila kosong, tidak ada baris grup.
 	ColGroups []ColGroup
+	// HeaderRows adalah header berjenjang (3+ baris) untuk kasus bertingkat
+	// (mis. Rekap Penggunaan Dana: Nominal -> Kegiatan -> Aktivitas). Bila
+	// diisi, renderer mengabaikan ColGroups dan menggambar HeaderRows. Setiap
+	// baris menutupi seluruh lebar kolom (jumlah Colspan per baris = jumlah
+	// kolom); sel Rowspan=-1 adalah lanjutan sel dari baris di atas.
+	HeaderRows [][]HeaderCell
 	// RowBold menandai baris data yang harus dicetak tebal (baris subtotal
 	// pada pivot berjenjang). Panjangnya menyusul baris Rows.
 	RowBold []bool
