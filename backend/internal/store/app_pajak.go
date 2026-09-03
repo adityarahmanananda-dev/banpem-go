@@ -29,17 +29,18 @@ func TaxValueForJenis(inv Invoice, jenis string) int64 {
 	return 0
 }
 
-// nomorBuktiSetor merangkai nomor bukti setor dari NTB dan NTPN. Keduanya
-// disimpan bila diisi, agar tidak hilang saat entri diedit ulang.
+// nomorBuktiSetor merangkai nomor bukti setor dari NTB dan NTPN. Nomor bukti
+// ditampilkan dalam dua baris: "NTPN" lalu "=<nilai>" pada baris berikutnya
+// (SVP NTPN di baris baru). NTB hanya dipakai bila NTPN kosong. Nilai NTB/NTPN
+// tetap tersimpan di tabel REKAP_PAJAK sehingga tidak hilang saat diedit ulang.
 func nomorBuktiSetor(ntbn, ntpn string) string {
-	parts := []string{}
-	if ntbn != "" {
-		parts = append(parts, "NTB="+ntbn)
-	}
 	if ntpn != "" {
-		parts = append(parts, "NTPN="+ntpn)
+		return "NTPN\n=" + ntpn
 	}
-	return strings.Join(parts, "\n")
+	if ntbn != "" {
+		return "NTB\n=" + ntbn
+	}
+	return ""
 }
 
 // InferJenisPajak menyimpulkan jenis pajak dari uraian entri setor.
@@ -282,7 +283,7 @@ func (s *Store) CreateJasaGiro(ctx context.Context, bantuanID int64, tanggal tim
 }
 
 func (s *Store) ListJasaGiro(ctx context.Context, bantuanID int64) ([]JasaGiro, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT id, bantuan_id, tanggal, nominal, uraian FROM jasa_giro WHERE bantuan_id=$1 ORDER BY tanggal, id`, bantuanID)
+	rows, err := s.Pool.Query(ctx, `SELECT id, bantuan_id, tanggal, nominal, uraian FROM jasa_giro WHERE bantuan_id=$1 ORDER BY id`, bantuanID)
 	if err != nil {
 		return nil, err
 	}

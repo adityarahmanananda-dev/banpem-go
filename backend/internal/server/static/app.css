@@ -24,12 +24,14 @@ tr.no-drag {
 }
 
 #ledgerTbody tr,
-#rekapTbody tr {
+#rekapTbody tr,
+#rekapPajakTbody tr {
   cursor: grab;
 }
 
 #ledgerTbody tr:active,
-#rekapTbody tr:active {
+#rekapTbody tr:active,
+#rekapPajakTbody tr:active {
   cursor: grabbing;
 }
 

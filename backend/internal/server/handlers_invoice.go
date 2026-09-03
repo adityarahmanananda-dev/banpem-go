@@ -137,7 +137,7 @@ func parseInvoiceForm(r *http.Request) (store.InvoiceInput, error) {
 		Bank:                 formStr(r, "bank"),
 		NPWP:                 formStr(r, "npwp"),
 		NomorBupotPPN:        formStr(r, "nomor_bupot_ppn"),
-		NomorBupotPPH:        formStr(r, "nomor_bupot_pph"),
+		NomorBupotPPH:        invoiceBupotPPH(r),
 		BiayaAdminDibebankan: formStr(r, "biaya_admin_dibebankan"),
 	}
 	if in.JenisMenu == 0 {
@@ -181,6 +181,21 @@ func parseInvoiceForm(r *http.Request) (store.InvoiceInput, error) {
 		in.Realisasi = append(in.Realisasi, store.RealisasiInput{KomponenID: kid, Bruto: bv})
 	}
 	return in, nil
+}
+
+// invoiceBupotPPH mengambil nomor bupot PPh sesuai jenis pengeluaran aktif:
+// menu 1 (Barang/Jasa) -> nomor_bupot_pph, menu 2 (Honor Narasumber) ->
+// nomor_bupot_pph_ns, menu 3 (Honor Peserta) -> nomor_bupot_pph_pst. Nama field
+// dipisahkan agar nilai dari menu tersembunyi tidak menimpa nilai yang terisi.
+func invoiceBupotPPH(r *http.Request) string {
+	switch int(formInt(r, "jenis_menu")) {
+	case 2:
+		return formStr(r, "nomor_bupot_pph_ns")
+	case 3:
+		return formStr(r, "nomor_bupot_pph_pst")
+	default:
+		return formStr(r, "nomor_bupot_pph")
+	}
 }
 
 func (s *Server) handleTagihanPost(w http.ResponseWriter, r *http.Request) {

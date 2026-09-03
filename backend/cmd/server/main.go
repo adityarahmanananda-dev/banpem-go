@@ -27,6 +27,10 @@ func main() {
 	if err := st.Migrate(ctx, migrations.FS); err != nil {
 		log.Fatalf("migrasi database gagal: %v", err)
 	}
+	// Samakan urutan semua buku ke urutan input (data lama ikut terurut).
+	if err := st.ResyncAllLedger(ctx); err != nil {
+		log.Printf("peringatan: sinkronisasi urutan buku gagal: %v", err)
+	}
 	if _, err := st.BackupFile(ctx, backupDir); err != nil {
 		log.Printf("peringatan: backup otomatis gagal: %v", err)
 	}

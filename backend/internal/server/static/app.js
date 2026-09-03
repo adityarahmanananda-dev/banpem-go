@@ -70,31 +70,82 @@
     });
   }
 
-  // ---- Sortable drag & drop untuk baris ledger / rekap belanja ----
+  // ---- Sortable drag & drop untuk baris ledger / rekap ----
+  function postOrder(tbody) {
+    var url = tbody.getAttribute("data-url");
+    if (!url) return;
+    var order = [];
+    tbody.querySelectorAll("tr").forEach(function (tr) {
+      var id = tr.getAttribute("data-id");
+      if (id) order.push(Number(id));
+    });
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ order: order })
+    }).then(function (resp) {
+      if (!resp.ok) {
+        alert("Gagal menyimpan urutan.");
+        return;
+      }
+      // Muat ulang agar nomor urut & saldo (yang dihitung server) selalu
+      // konsisten, termasuk menjaga baris saldo awal tetap di nomor 1 dan
+      // nilai saldo akhir tidak salah.
+      window.location.reload();
+    });
+  }
+  var sortables = {};
   function initSortable(tbody) {
     var url = tbody.getAttribute("data-url");
     if (!url) return;
-    new Sortable(tbody, {
+    var inst = new Sortable(tbody, {
       animation: 150,
       handle: "tr",
       filter: ".no-drag",
-      onEnd: function () {
-        var order = [];
-        tbody.querySelectorAll("tr").forEach(function (tr) {
-          var id = tr.getAttribute("data-id");
-          if (id) order.push(Number(id));
-        });
-        fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ order: order })
-        }).then(function (resp) {
-          if (!resp.ok) alert("Gagal menyimpan urutan.");
-        });
-      }
+      onEnd: function () { postOrder(tbody); }
     });
+    if (tbody.id) sortables[tbody.id] = inst;
   }
   document.querySelectorAll("tbody[data-url]").forEach(initSortable);
+
+  // ---- Atur urutan manual: tombol naik/turun per baris ----
+  function bindAturUrutan(btn) {
+    var tbody = document.querySelector(btn.getAttribute("data-target"));
+    if (!tbody) return;
+    var key = "aturUrutan." + window.location.pathname + "#" + tbody.id;
+    function apply(on) {
+      localStorage.setItem(key, on ? "1" : "0");
+      btn.classList.toggle("active", on);
+      btn.innerHTML = on
+        ? '<i class="bi bi-check-lg"></i> Selesai'
+        : '<i class="bi bi-arrow-up-down"></i> Atur Urutan';
+      tbody.querySelectorAll(".urutan-col").forEach(function (c) {
+        c.classList.toggle("d-none", !on);
+      });
+      var inst = sortables[tbody.id];
+      if (inst) inst.option("disabled", on);
+    }
+    btn.addEventListener("click", function () {
+      apply(localStorage.getItem(key) !== "1");
+    });
+    if (tbody.getAttribute("data-urutan-bound") !== "1") {
+      tbody.setAttribute("data-urutan-bound", "1");
+      tbody.addEventListener("click", function (e) {
+        var up = e.target.closest(".btn-urutan-up");
+        var down = e.target.closest(".btn-urutan-down");
+        if (!up && !down) return;
+        e.preventDefault();
+        var tr = (up || down).closest("tr");
+        if (!tr) return;
+        var target = up ? tr.previousElementSibling : tr.nextElementSibling;
+        if (!target || target.classList.contains("no-drag")) return;
+        tbody.insertBefore(tr, up ? target : target.nextElementSibling);
+        postOrder(tbody);
+      });
+    }
+    apply(localStorage.getItem(key) === "1");
+  }
+  document.querySelectorAll(".atur-urutan").forEach(bindAturUrutan);
 
   // ---- Setor pajak: total nominal tercentang ----
   function rupiahFromSen(total) {

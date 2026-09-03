@@ -127,6 +127,7 @@ func (s *Server) buildLedgerReport(ctx context.Context, b *store.Bantuan, table 
 
 // rekapRow adalah satu baris section 1 rekap pajak.
 type rekapRow struct {
+	InvID   int64
 	Tanggal time.Time
 	Uraian  string
 	Bruto   int64
@@ -145,10 +146,10 @@ type rekapSetorLine struct {
 	NTPN  string
 }
 
-// buildRekapRows menyusun satu baris per invoice (urut tanggal,id) beserta
-// NTB/NTPN per jenis pajak.
+// buildRekapRows menyusun satu baris per invoice (urut input/sort_order)
+// beserta NTB/NTPN per jenis pajak.
 func (s *Server) buildRekapRows(ctx context.Context, bantuanID int64) ([]rekapRow, error) {
-	invoices, err := s.Store.ListInvoices(ctx, bantuanID, "")
+	invoices, err := s.Store.ListInvoices(ctx, bantuanID, "sort")
 	if err != nil {
 		return nil, err
 	}
@@ -179,6 +180,7 @@ func (s *Server) buildRekapRows(ctx context.Context, bantuanID int64) ([]rekapRo
 	var out []rekapRow
 	for _, inv := range invoices {
 		r := rekapRow{
+			InvID:   inv.ID,
 			Tanggal: inv.Tanggal,
 			Uraian:  inv.Uraian,
 			Bruto:   inv.Bruto,

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"sort"
 	"time"
 )
 
@@ -168,6 +169,121 @@ func ListLedger(ctx context.Context, q Querier, bantuanID int64, table string) (
 		err = listLedgerBKU(ctx, q, bantuanID, &out)
 	}
 	return out, err
+}
+
+// syncLedgerItem adalah satu baris ledger untuk sinkronisasi urutan input.
+type syncLedgerItem struct {
+	id      int64
+	jenis   string
+	debit   int64
+	kredit  int64
+	sortRow int
+}
+
+// syncKey mengembalikan kunci urutan alami baris buku:
+// saldo_awal selalu paling atas (0); lalu baris milik tagihan mengikuti urutan
+// input tagihan (sort_order); entri lain (manual/setor_pajak/jasa_giro) mengikuti
+// urutan pembuatannya (id).
+func (it syncLedgerItem) syncKey() (p, s, t int) {
+	if it.jenis == "saldo_awal" {
+		return 0, 0, 0
+	}
+	if it.sortRow > 0 {
+		return 1, it.sortRow, int(it.id)
+	}
+	return 2, int(it.id), int(it.id)
+}
+
+// SyncLedgerInputOrder menata ulang nomor baris buku (bku/bank) mengikuti
+// urutan input ascending: baris 'saldo_awal' tetap nomor 1, lalu baris dari
+// tagihan berurutan sesuai sort_order tagihan, lalu entri lainnya berurutan
+// id. Saldo dihitung ulang mulai dari saldo_awal.
+func SyncLedgerInputOrder(ctx context.Context, q Querier, bantuanID int64, table string) error {
+	sel := `SELECT l.id, l.jenis_transaksi, l.debit, l.kredit, COALESCE(i.sort_order, 0)
+		FROM trx_ledger l LEFT JOIN trx_invoice i ON i.id = l.invoice_id
+		WHERE l.bantuan_id=$1`
+	upd := `UPDATE trx_ledger SET nomor=$1, saldo=$2 WHERE id=$3`
+	if table == "bank" {
+		sel = `SELECT l.id, l.jenis_transaksi, l.debit, l.kredit, COALESCE(i.sort_order, 0)
+			FROM trx_bank_ledger l LEFT JOIN trx_invoice i ON i.id = l.invoice_id
+			WHERE l.bantuan_id=$1`
+		upd = `UPDATE trx_bank_ledger SET nomor=$1, saldo=$2 WHERE id=$3`
+	}
+	rows, err := q.Query(ctx, sel, bantuanID)
+	if err != nil {
+		return err
+	}
+	var items []syncLedgerItem
+	for rows.Next() {
+		var it syncLedgerItem
+		if err := rows.Scan(&it.id, &it.jenis, &it.debit, &it.kredit, &it.sortRow); err != nil {
+			rows.Close()
+			return err
+		}
+		items = append(items, it)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	sort.SliceStable(items, func(a, b int) bool {
+		pa, sa, ta := items[a].syncKey()
+		pb, sb, tb := items[b].syncKey()
+		if pa != pb {
+			return pa < pb
+		}
+		if sa != sb {
+			return sa < sb
+		}
+		return ta < tb
+	})
+	base := SaldoAwalValue(ctx, q, bantuanID)
+	running := base
+	for i, it := range items {
+		var saldo int64
+		if it.jenis == "saldo_awal" {
+			saldo = base
+			running = base
+		} else {
+			running = running - it.debit + it.kredit
+			saldo = running
+		}
+		if _, err := q.Exec(ctx, upd, i+1, saldo, it.id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ResyncAllLedger menyinkronkan urutan seluruh buku (BKU & Bank) semua bantuan
+// ke urutan input. Dipanggil saat server start agar data lama ikut terurut.
+func (s *Store) ResyncAllLedger(ctx context.Context) error {
+	rows, err := s.Pool.Query(ctx, `SELECT id FROM bantuan ORDER BY id`)
+	if err != nil {
+		return err
+	}
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := SyncLedgerInputOrder(ctx, s.Pool, id, "bku"); err != nil {
+			return err
+		}
+		if err := SyncLedgerInputOrder(ctx, s.Pool, id, "bank"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func listLedgerBKU(ctx context.Context, q Querier, bantuanID int64, out *[]Ledger) error {

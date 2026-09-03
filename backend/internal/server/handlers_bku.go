@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"ebku/internal/money"
 	"ebku/internal/store"
@@ -93,17 +94,22 @@ func (s *Server) handleBKU(w http.ResponseWriter, r *http.Request) {
 		totDebit += v.Debit
 		totKredit += v.KreditDisp
 	}
+	var saldoAkhir int64
+	if len(views) > 0 {
+		saldoAkhir = views[len(views)-1].SaldoDisp
+	}
 	ft, fm := s.getFlash(w, r)
 	data := struct {
 		baseView
-		Rows      []ledgerView
-		TotDebit  int64
-		TotKredit int64
-		Versi     versiInfo
+		Rows       []ledgerView
+		TotDebit   int64
+		TotKredit  int64
+		SaldoAkhir int64
+		Versi      versiInfo
 	}{
 		baseView: baseView{Title: "Buku Kas Umum", Active: "bku", FlashType: ft, FlashMsg: fm,
 			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
-		Rows: views, TotDebit: totDebit, TotKredit: totKredit, Versi: vi,
+		Rows: views, TotDebit: totDebit, TotKredit: totKredit, SaldoAkhir: saldoAkhir, Versi: vi,
 	}
 	s.render(w, r, "bku.html", data)
 }
@@ -420,9 +426,17 @@ func (s *Server) setorFormData(r *http.Request, sid int64, edit bool) (*setorFor
 }
 
 func extractNoBukti(nb, prefix string) string {
-	for _, line := range splitLines(nb) {
+	lines := splitLines(nb)
+	// Format lama: satu baris "NTPN=nilai" (atau "NTB=nilai").
+	for _, line := range lines {
 		if idx := indexOf(line, prefix+"="); idx >= 0 {
 			return line[idx+len(prefix)+1:]
+		}
+	}
+	// Format baru: baris "NTPN" diikuti baris "=nilai".
+	for i, line := range lines {
+		if strings.TrimSpace(line) == prefix && i+1 < len(lines) {
+			return strings.TrimPrefix(strings.TrimSpace(lines[i+1]), "=")
 		}
 	}
 	return ""

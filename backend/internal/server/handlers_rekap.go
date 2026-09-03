@@ -94,7 +94,9 @@ func (s *Server) handleRekapBelanja(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "rekap_belanja.html", data)
 }
 
-func (s *Server) handleRekapBelanjaReorder(w http.ResponseWriter, r *http.Request) {
+// handleInvoiceReorder menyimpan urutan invoice (drag-and-drop) dari halaman
+// rekap belanja maupun rekap pajak (bagian PENERIMAAN).
+func (s *Server) handleInvoiceReorder(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r, "id")
 	if err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)

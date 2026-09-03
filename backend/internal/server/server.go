@@ -126,8 +126,9 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("GET /bantuan/{id}/laporan/rekap/word", s.handleRekapPajakExportWord)
 
 	mux.HandleFunc("GET /bantuan/{id}/rekap-pajak", s.handleRekapPajak)
+	mux.HandleFunc("POST /bantuan/{id}/rekap-pajak/reorder", s.handleInvoiceReorder)
 	mux.HandleFunc("GET /bantuan/{id}/rekap-belanja", s.handleRekapBelanja)
-	mux.HandleFunc("POST /bantuan/{id}/rekap-belanja/reorder", s.handleRekapBelanjaReorder)
+	mux.HandleFunc("POST /bantuan/{id}/rekap-belanja/reorder", s.handleInvoiceReorder)
 	mux.HandleFunc("GET /bantuan/{id}/rekap-belanja/export-pdf", s.handleRekapBelanjaExportPDF)
 	mux.HandleFunc("GET /bantuan/{id}/rekap-belanja/export-word", s.handleRekapBelanjaExportWord)
 	mux.HandleFunc("GET /bantuan/{id}/rekap-realisasi", s.handleRekapRealisasi)

@@ -168,8 +168,9 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 			return err
 		}
 		if ppn > 0 {
+			bupotPPN := in.NomorBupotPPN
 			if _, err := AppendBKULedger(ctx, tx, LedgerEntry{
-				BantuanID: bantuanID, Tanggal: &tgl, NomorBukti: in.NomorBupotPPN,
+				BantuanID: bantuanID, Tanggal: &tgl, NomorBukti: in.NomorBupotPPN, NomorBupot: &bupotPPN,
 				Uraian: "Pemungutan PPN atas " + in.Uraian, Debit: 0, Kredit: ppn,
 				InvoiceID: &iidPtr, JenisTransaksi: "pungut_ppn",
 			}); err != nil {
@@ -177,8 +178,9 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 			}
 		}
 		if pph > 0 {
+			bupotPPH := in.NomorBupotPPH
 			if _, err := AppendBKULedger(ctx, tx, LedgerEntry{
-				BantuanID: bantuanID, Tanggal: &tgl, NomorBukti: in.NomorBupotPPH,
+				BantuanID: bantuanID, Tanggal: &tgl, NomorBukti: in.NomorBupotPPH, NomorBupot: &bupotPPH,
 				Uraian: "Pemungutan " + jenisPPH + " atas " + in.Uraian, Debit: 0, Kredit: pph,
 				InvoiceID: &iidPtr, JenisTransaksi: "pungut_pph",
 			}); err != nil {
@@ -202,7 +204,11 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 				return err
 			}
 		}
-		return nil
+		// Jaga urutan buku tetap mengikuti urutan input (saldo_awal di atas).
+		if err := SyncLedgerInputOrder(ctx, tx, bantuanID, "bku"); err != nil {
+			return err
+		}
+		return SyncLedgerInputOrder(ctx, tx, bantuanID, "bank")
 	})
 	return iid, err
 }
@@ -267,8 +273,9 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 			return err
 		}
 		if ppn > 0 {
+			bupotPPN := in.NomorBupotPPN
 			if _, err := AppendBKULedger(ctx, tx, LedgerEntry{
-				BantuanID: inv.BantuanID, Tanggal: &tgl, NomorBukti: in.NomorBupotPPN,
+				BantuanID: inv.BantuanID, Tanggal: &tgl, NomorBukti: in.NomorBupotPPN, NomorBupot: &bupotPPN,
 				Uraian: "Pemungutan PPN atas " + in.Uraian, Debit: 0, Kredit: ppn,
 				InvoiceID: &iidPtr, JenisTransaksi: "pungut_ppn",
 			}); err != nil {
@@ -276,8 +283,9 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 			}
 		}
 		if pph > 0 {
+			bupotPPH := in.NomorBupotPPH
 			if _, err := AppendBKULedger(ctx, tx, LedgerEntry{
-				BantuanID: inv.BantuanID, Tanggal: &tgl, NomorBukti: in.NomorBupotPPH,
+				BantuanID: inv.BantuanID, Tanggal: &tgl, NomorBukti: in.NomorBupotPPH, NomorBupot: &bupotPPH,
 				Uraian: "Pemungutan " + jenisPPH + " atas " + in.Uraian, Debit: 0, Kredit: pph,
 				InvoiceID: &iidPtr, JenisTransaksi: "pungut_pph",
 			}); err != nil {
@@ -299,7 +307,11 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 				return err
 			}
 		}
-		return nil
+		// Jaga urutan buku tetap mengikuti urutan input (saldo_awal di atas).
+		if err := SyncLedgerInputOrder(ctx, tx, inv.BantuanID, "bku"); err != nil {
+			return err
+		}
+		return SyncLedgerInputOrder(ctx, tx, inv.BantuanID, "bank")
 	})
 }
 
@@ -329,7 +341,14 @@ func (s *Store) DeleteInvoice(ctx context.Context, iid int64) error {
 		if err := RebuildLedger(ctx, tx, inv.BantuanID, "bku"); err != nil {
 			return err
 		}
-		return RebuildLedger(ctx, tx, inv.BantuanID, "bank")
+		if err := RebuildLedger(ctx, tx, inv.BantuanID, "bank"); err != nil {
+			return err
+		}
+		// Jaga urutan buku tetap mengikuti urutan input (saldo_awal di atas).
+		if err := SyncLedgerInputOrder(ctx, tx, inv.BantuanID, "bku"); err != nil {
+			return err
+		}
+		return SyncLedgerInputOrder(ctx, tx, inv.BantuanID, "bank")
 	})
 }
 

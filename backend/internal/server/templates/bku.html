@@ -5,6 +5,7 @@
     <a href="/bantuan/{{.Bantuan.ID}}/bku/tambah" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Input Manual</a>
     <a href="/bantuan/{{.Bantuan.ID}}/bku/setor-pajak" class="btn btn-outline-warning btn-sm"><i class="bi bi-bank"></i> Setor Pajak</a>
     <a href="/bantuan/{{.Bantuan.ID}}/tagihan/tambah" class="btn btn-outline-primary btn-sm"><i class="bi bi-receipt"></i> Input Tagihan</a>
+    <button type="button" class="btn btn-outline-secondary btn-sm atur-urutan" data-target="#ledgerTbody"><i class="bi bi-arrow-up-down"></i> Atur Urutan</button>
     <div class="dropdown">
       <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Export</button>
       <ul class="dropdown-menu">
@@ -35,6 +36,7 @@
           <th class="text-end">Debet (Rp)</th>
           <th class="text-end">Kredit (Rp)</th>
           <th class="text-end">Saldo (Rp)</th>
+          <th class="text-center urutan-col d-none" style="width:70px">Urut</th>
           <th style="width:180px" class="text-end">Aksi</th>
         </tr>
       </thead>
@@ -51,6 +53,14 @@
           <td class="text-end">{{if .Debit}}{{fmtMoney .Debit}}{{else}}-{{end}}</td>
           <td class="text-end">{{if .KreditDisp}}{{fmtMoney .KreditDisp}}{{else}}-{{end}}</td>
           <td class="text-end">{{fmtMoney .SaldoDisp}}</td>
+          <td class="text-center urutan-col d-none">
+            {{if ne .JenisTransaksi "saldo_awal"}}
+            <div class="btn-group btn-group-sm">
+              <button type="button" class="btn btn-outline-secondary btn-urutan-up" title="Naik"><i class="bi bi-chevron-up"></i></button>
+              <button type="button" class="btn btn-outline-secondary btn-urutan-down" title="Turun"><i class="bi bi-chevron-down"></i></button>
+            </div>
+            {{end}}
+          </td>
           <td class="text-end">
             {{if eq .JenisTransaksi "manual"}}
             <a class="btn btn-outline-secondary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/bku/detail/{{.ID}}" title="Detail"><i class="bi bi-eye"></i></a>
@@ -72,6 +82,7 @@
           <td colspan="4" class="text-end">TOTAL</td>
           <td class="text-end">{{fmtMoney .TotDebit}}</td>
           <td class="text-end">{{fmtMoney .TotKredit}}</td>
+          <td class="text-end">Saldo Akhir: {{fmtMoney .SaldoAkhir}}</td>
           <td></td>
           <td></td>
         </tr>
