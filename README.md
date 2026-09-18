@@ -1,5 +1,7 @@
 # Banpem-GO — e-BKU Bantuan Pemerintah Sekolah
 
+[![CI](https://github.com/adityarahmanananda-dev/banpem-go/actions/workflows/ci.yml/badge.svg)](https://github.com/adityarahmanananda-dev/banpem-go/actions/workflows/ci.yml)
+
 Web app Go untuk administrasi **Buku Kas Umum (e-BKU)** bantuan pemerintah di sekolah (dipakai di SMK Negeri 26 Jakarta). Mengelola setiap akun bantuan: saldo awal, pencairan bertahap, tagihan, dan laporan keuangan resmi — dengan **aritmetika uang berbasis integer (sen) + pembulatan bankir (ROUND HALF-EVEN)** di setiap langkah (spesifikasi melarang float).
 
 ## Fitur
