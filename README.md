@@ -4,6 +4,12 @@
 
 Web app Go untuk administrasi **Buku Kas Umum (e-BKU)** bantuan pemerintah di sekolah (dipakai di SMK Negeri 26 Jakarta). Mengelola setiap akun bantuan: saldo awal, pencairan bertahap, tagihan, dan laporan keuangan resmi — dengan **aritmetika uang berbasis integer (sen) + pembulatan bankir (ROUND HALF-EVEN)** di setiap langkah (spesifikasi melarang float).
 
+## Screenshot
+
+![UI demo (data dummy)](docs/screenshot.png)
+
+> Screenshot mockup UI dengan data dummy — bukan data riil.
+
 ## Fitur
 
 - **Manajemen Bantuan** — CRUD per bantuan, auto-pencairan tahap 1 (70% nominal saat > Rp100.000.000), saldo awal.
