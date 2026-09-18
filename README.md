@@ -1,78 +1,78 @@
-# Banpem-GO — e-BKU Bantuan Pemerintah Sekolah
+# Banpem-GO — Government Grant Cash Book (e-BKU)
 
 [![CI](https://github.com/adityarahmanananda-dev/banpem-go/actions/workflows/ci.yml/badge.svg)](https://github.com/adityarahmanananda-dev/banpem-go/actions/workflows/ci.yml)
 
-Web app Go untuk administrasi **Buku Kas Umum (e-BKU)** bantuan pemerintah di sekolah (dipakai di SMK Negeri 26 Jakarta). Mengelola setiap akun bantuan: saldo awal, pencairan bertahap, tagihan, dan laporan keuangan resmi — dengan **aritmetika uang berbasis integer (sen) + pembulatan bankir (ROUND HALF-EVEN)** di setiap langkah (spesifikasi melarang float).
+A Go web app for administering **government grant cash books (e-BKU)** at schools (in use at SMK Negeri 26 Jakarta). It manages every grant account: opening balance, phased disbursement, invoices, and official financial reports — using **integer-based money arithmetic (cents) + banker's rounding (ROUND HALF-EVEN)** at every step (the specification forbids floats).
 
 ## Screenshot
 
-![UI demo (data dummy)](docs/screenshot.png)
+![UI demo (dummy data)](docs/screenshot.png)
 
-> Screenshot mockup UI dengan data dummy — bukan data riil.
+> Screenshot is a UI mockup with dummy data — not real data.
 
-## Fitur
+## Features
 
-- **Manajemen Bantuan** — CRUD per bantuan, auto-pencairan tahap 1 (70% nominal saat > Rp100.000.000), saldo awal.
-- **Mesin Pajak** (`internal/tax`) — PPN 12%, PPh 22 (1,5%), PPh 23 (2%), PPh 21 (5/15/2,5% per golongan narasumber), 5 jenis menu tagihan (Barang/Jasa, Honor Narasumber, Honor Peserta, Transport, Uang Harian). Disertai 5 vektor uji wajib di `tax_test.go`.
-- **Dua buku besar** — *Buku Kas Umum* (BKU) dan *Buku Kas Bank* dengan entri otomatis per tagihan (pembayaran, pungut PPN/PPh, biaya admin Rp2.900 untuk transfer antar-bank), perhitungan saldo berjalan, dan tampilan offset "Real vs Rencana 100%".
-- **Workflow setor pajak** — setor pajak multi-tagihan dengan referensi NTB/NTPN, plus entri **Jasa Giro**.
-- **Master data berjenjang** — Kegiatan → Sub Kegiatan → Aktivitas → Komponen (dengan pagu per komponen), dropdown berjenjang untuk baris realisasi tagihan dan alokasi pajak proporsional.
-- **Laporan & export** — Excel (`.xlsx`), PDF, dan Word (`.docx`) untuk **BKU, Buku Kas Bank, Rekap Pajak, Rekap Belanja, Daftar Tagihan, RAB, Rekap Realisasi, Rekapitulasi Penggunaan Dana** — semua dengan blok tanda tangan Indonesia, layout A4, header tabel berulang, styling Excel spesifik (header `#4472C4`, total `#D9E2F3`).
-- **Urut ulang baris** ledger/belanja via drag-and-drop (SortableJS).
-- **Backup database** — snapshot SQL-dump di setiap startup (simpan 10 terakhir), export/import via UI dengan validasi struktur.
+- **Grant management** — CRUD per grant, automatic phase-1 disbursement (70% of the amount when > Rp100,000,000), opening balance.
+- **Tax engine** (`internal/tax`) — VAT 12%, PPh 22 (1.5%), PPh 23 (2%), PPh 21 (5/15/2.5% by speaker class), 5 invoice menu types (Goods/Services, Speaker Honorarium, Participant Honorarium, Transport, Per-diem). Ships with 5 mandatory test vectors in `tax_test.go`.
+- **Two ledgers** — *General Cash Book (BKU)* and *Bank Cash Book* with automatic entries per invoice (payment, VAT/income-tax withholding, Rp2,900 admin fee for interbank transfers), running balance, and a "Real vs 100% Plan" offset view.
+- **Tax deposit workflow** — multi-invoice tax deposits with NTB/NTPN references, plus **bank interest** entries.
+- **Hierarchical master data** — Activity → Sub-activity → Activity → Component (with per-component budget ceiling), cascading dropdowns for invoice realization rows and proportional tax allocation.
+- **Reports & export** — Excel (`.xlsx`), PDF, and Word (`.docx`) for **BKU, Bank Cash Book, Tax Recap, Spending Recap, Invoice List, RAB, Realization Recap, Fund Usage Recap** — all with Indonesian signature blocks, A4 layout, repeating table headers, and specific Excel styling (header `#4472C4`, totals `#D9E2F3`).
+- **Row reordering** of ledger/spending via drag-and-drop (SortableJS).
+- **Database backup** — SQL-dump snapshot at every startup (keeps the last 10), plus export/import via UI with structure validation.
 
 ## Tech stack
 
-- **Go 1.24** — stdlib `net/http` + `html/template` dengan `embed.FS` untuk template/static.
+- **Go 1.24** — stdlib `net/http` + `html/template` with `embed.FS` for templates/static.
 - **PostgreSQL** — `jackc/pgx/v5` (pgxpool).
-- **Export** — `go-pdf/fpdf` (PDF), `xuri/excelize/v2` (XLSX), dan writer `.docx` buatan sendiri (zip/XML); font Arimo di-embed.
-- **Frontend** — Bootstrap 5.3 + Bootstrap Icons + SortableJS (CDN), `app.js`/`app.css` di-embed ke binary.
-- **Docker** — multi-stage Dockerfile (`golang:1.24-alpine` → `alpine:3.20`, non-root, binary statis) + `docker-compose.yml`.
+- **Export** — `go-pdf/fpdf` (PDF), `xuri/excelize/v2` (XLSX), and a custom `.docx` writer (zip/XML); Arimo font embedded.
+- **Frontend** — Bootstrap 5.3 + Bootstrap Icons + SortableJS (CDN), `app.js`/`app.css` embedded into the binary.
+- **Docker** — multi-stage Dockerfile (`golang:1.24-alpine` → `alpine:3.20`, non-root, static binary) + `docker-compose.yml`.
 
-## Instalasi & menjalankan
+## Installation & running
 
 ### Docker
 
 ```bash
-docker compose up --build     # app di :8080
+docker compose up --build     # app on :8080
 ```
 
-### Lokal
+### Local
 
 ```bash
 cd backend
-go run ./cmd/server           # butuh DATABASE_URL
+go run ./cmd/server           # requires DATABASE_URL
 ```
 
-Migrasi SQL berjalan otomatis saat startup.
+SQL migrations run automatically at startup.
 
-## Konfigurasi (env)
+## Configuration (env)
 
-| Variabel | Default | Keterangan |
+| Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | — | DSN PostgreSQL (wajib) |
-| `BACKUP_DIR` | `/backups` | Direktori snapshot backup |
-| `ADDR` | `:8080` | Alamat listen server |
+| `DATABASE_URL` | — | PostgreSQL DSN (required) |
+| `BACKUP_DIR` | `/backups` | Backup snapshot directory |
+| `ADDR` | `:8080` | Server listen address |
 
-Salin `.env.example` ke `.env` untuk konfigurasi lokal. **Jangan commit `.env`** (sudah di-ignore git).
+Copy `.env.example` to `.env` for local config. **Never commit `.env`** (git-ignored).
 
-## Struktur project
+## Project structure
 
 ```
 backend/
 ├── cmd/server/main.go        # entry point: env, DB, migrate, backup, serve
 ├── Dockerfile, go.mod, go.sum
 ├── internal/
-│   ├── server/               # HTTP layer + 24 template HTML
+│   ├── server/               # HTTP layer + 24 HTML templates
 │   ├── store/                # data layer (models, ledger, dump, app_*)
-│   ├── tax/                  # mesin pajak (+tax_test.go)
-│   ├── money/                # aritmetika sen, HALF-EVEN (+money_test.go)
+│   ├── tax/                  # tax engine (+tax_test.go)
+│   ├── money/                # cent arithmetic, HALF-EVEN (+money_test.go)
 │   ├── export/               # report model + excel.go, pdf.go, word.go, fonts
 │   └── migrations/           # 001_init.sql … 004_aktivitas.sql
-└── migrations/001_init.sql   # salinan schema lama
+└── migrations/001_init.sql   # legacy schema copy
 ```
 
-## Catatan
+## Notes
 
-- Spesifikasi perilaku lengkap ada di `PROMPT_eBKU_STACK_AGNOSTIC.txt` (828 baris, Indonesia).
-- `docker-compose.yml` hanya mendefinisikan service `app` dan bergantung pada Postgres eksternal (mis. Supabase pooler); tidak ada service `db` bawaan.
+- The full behavior specification is in `PROMPT_eBKU_STACK_AGNOSTIC.txt` (828 lines, Indonesian).
+- `docker-compose.yml` only defines the `app` service and depends on an external Postgres (e.g. Supabase pooler); there is no built-in `db` service.
