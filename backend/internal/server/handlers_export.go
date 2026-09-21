@@ -26,6 +26,20 @@ func exportParams(r *http.Request) (tgl time.Time, orientasi, versi string) {
 	return
 }
 
+// parseFilterTanggal membaca filter tanggal ("YYYY-MM-DD") dari query string.
+// Mengembalikan nil bila kosong atau tidak valid.
+func parseFilterTanggal(r *http.Request) *time.Time {
+	s := r.URL.Query().Get("tanggal")
+	if s == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
 func (s *Server) serveExcel(w http.ResponseWriter, rep export.Report, filename string) {
 	data, err := export.ExcelBytes(rep)
 	if err != nil {
@@ -181,7 +195,9 @@ func (s *Server) rekapBelanjaExport(w http.ResponseWriter, r *http.Request, kind
 		return
 	}
 	tgl, _, _ := exportParams(r)
-	rep, err := s.buildRekapBelanja(r.Context(), &b, tgl)
+	filtTanggal := parseFilterTanggal(r)
+	colOpts := rekapBelanjaColOptsFromQuery(r.URL.Query())
+	rep, err := s.buildRekapBelanja(r.Context(), &b, tgl, filtTanggal, colOpts)
 	if err != nil {
 		s.fail(w, r, err, "/")
 		return

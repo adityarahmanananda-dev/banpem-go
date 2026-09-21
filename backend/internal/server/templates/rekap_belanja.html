@@ -12,10 +12,47 @@
   </div>
 </div>
 
-<div class="row g-3 mb-3">
-  <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Bruto</div><div class="fs-5 fw-bold">{{fmtMoney .TotBruto}}</div></div></div></div>
-  <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Pajak</div><div class="fs-5 fw-bold">{{fmtMoney (add .TotPPN .TotPPh)}}</div></div></div></div>
-  <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Biaya Admin</div><div class="fs-5 fw-bold">{{fmtMoney .TotBiayaAdmin}}</div></div></div></div>
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="get" class="d-flex flex-wrap align-items-center gap-2 mb-0">
+      <span class="text-muted small fw-bold">Tanggal Tagihan:</span>
+      <input type="date" class="form-control form-control-sm" style="width:auto" name="tanggal" value="{{.SelTanggal}}" onchange="this.form.submit()">
+      {{if .SelTanggal}}<a href="/bantuan/{{.Bantuan.ID}}/rekap-belanja" class="btn btn-sm btn-outline-secondary">Reset Tanggal</a>{{end}}
+      <span class="text-muted small fw-bold ms-3">Kolom:</span>
+      <div class="form-check form-check-inline mb-0">
+        <input class="form-check-input" type="checkbox" name="kegiatan" value="1" id="kolKegiatan" {{if .SelKegiatan}}checked{{end}} onchange="this.form.submit()">
+        <label class="form-check-label" for="kolKegiatan">Kegiatan / Sub / Aktivitas</label>
+      </div>
+      <div class="form-check form-check-inline mb-0">
+        <input class="form-check-input" type="checkbox" name="bruto" value="1" id="kolBruto" {{if .SelBruto}}checked{{end}} onchange="this.form.submit()">
+        <label class="form-check-label" for="kolBruto">Bruto</label>
+      </div>
+      <div class="form-check form-check-inline mb-0">
+        <input class="form-check-input" type="checkbox" name="potongan" value="1" id="kolPotongan" {{if .SelPotongan}}checked{{end}} onchange="this.form.submit()">
+        <label class="form-check-label" for="kolPotongan">Potongan Pajak (PPN+PPh)</label>
+      </div>
+      <div class="form-check form-check-inline mb-0">
+        <input class="form-check-input" type="checkbox" name="setelah_pajak" value="1" id="kolSetelahPajak" {{if .SelSetelahPajak}}checked{{end}} onchange="this.form.submit()">
+        <label class="form-check-label" for="kolSetelahPajak">Setelah Potong Pajak</label>
+      </div>
+      <div class="form-check form-check-inline mb-0">
+        <input class="form-check-input" type="checkbox" name="biaya_admin" value="1" id="kolBiayaAdmin" {{if .SelBiayaAdmin}}checked{{end}} onchange="this.form.submit()">
+        <label class="form-check-label" for="kolBiayaAdmin">Biaya Admin</label>
+      </div>
+      <div class="form-check form-check-inline mb-0">
+        <input class="form-check-input" type="checkbox" name="ditransfer" value="1" id="kolDitransfer" {{if .SelDitransfer}}checked{{end}} onchange="this.form.submit()">
+        <label class="form-check-label" for="kolDitransfer">Ditransfer ke Pihak Ketiga</label>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="d-flex flex-wrap gap-3 mb-3">
+  {{if .SelBruto}}<div class="card text-center" style="min-width:180px"><div class="card-body py-2"><div class="text-muted small">Total Bruto</div><div class="fs-6 fw-bold">{{fmtMoney .TotBruto}}</div></div></div>{{end}}
+  {{if .SelPotongan}}<div class="card text-center" style="min-width:180px"><div class="card-body py-2"><div class="text-muted small">Total Potongan Pajak</div><div class="fs-6 fw-bold">{{fmtMoney .TotPotongan}}</div></div></div>{{end}}
+  {{if .SelSetelahPajak}}<div class="card text-center" style="min-width:180px"><div class="card-body py-2"><div class="text-muted small">Total Setelah Potong Pajak</div><div class="fs-6 fw-bold">{{fmtMoney .TotSetelahPajak}}</div></div></div>{{end}}
+  {{if .SelBiayaAdmin}}<div class="card text-center" style="min-width:180px"><div class="card-body py-2"><div class="text-muted small">Total Biaya Admin</div><div class="fs-6 fw-bold">{{fmtMoney .TotBiayaAdmin}}</div></div></div>{{end}}
+  {{if .SelDitransfer}}<div class="card text-center" style="min-width:180px"><div class="card-body py-2"><div class="text-muted small">Total Ditransfer</div><div class="fs-6 fw-bold">{{fmtMoney .TotDitransfer}}</div></div></div>{{end}}
 </div>
 
 <div class="card">
@@ -23,34 +60,49 @@
     <table class="table table-sm table-bordered align-middle">
       <thead class="table-light">
         <tr>
-          <th>No</th><th>Kegiatan / Sub Kegiatan / Aktivitas</th><th>Uraian Tagihan</th><th>Penyedia / Bank / No.Rek / NPWP</th>
-          <th class="text-end">Bruto</th><th class="text-end">PPN</th><th class="text-end">PPh</th><th class="text-end">Biaya Admin</th>
+          <th>No</th><th>Tanggal</th>
+          {{if .SelKegiatan}}<th>Kegiatan / Sub Kegiatan / Aktivitas</th>{{end}}
+          <th>Uraian Tagihan</th><th>Penyedia / Bank / No.Rek / NPWP</th>
+          {{if .SelBruto}}<th class="text-end">Bruto</th>{{end}}
+          {{if .SelPotongan}}<th class="text-end">Potongan Pajak (PPN+PPh)</th>{{end}}
+          {{if .SelSetelahPajak}}<th class="text-end">Setelah Potong Pajak</th>{{end}}
+          {{if .SelBiayaAdmin}}<th class="text-end">Biaya Admin</th>{{end}}
+          {{if .SelDitransfer}}<th class="text-end">Ditransfer ke Pihak Ketiga</th>{{end}}
         </tr>
       </thead>
       <tbody>
         {{range $i, $r := .Rows}}
         <tr>
           <td>{{inc $i}}</td>
-          <td style="white-space:pre-line"><b>KEGIATAN:</b> {{$r.Kegiatan}}
+          <td class="text-nowrap">{{dateID $r.Tanggal}}</td>
+          {{if $.SelKegiatan}}<td style="white-space:pre-line"><b>KEGIATAN:</b> {{$r.Kegiatan}}
 
 <b>SUB KEGIATAN:</b> {{$r.SubKeg}}
 
-<b>AKTIVITAS:</b> {{$r.Aktivitas}}</td>
+<b>AKTIVITAS:</b> {{$r.Aktivitas}}</td>{{end}}
           <td>{{$r.Uraian}}</td>
           <td class="small" style="white-space:pre-line">{{$r.Penyedia}}
 {{$r.Bank}} - {{$r.NoRek}}
 NPWP: {{formatNPWP $r.NPWP}}</td>
-          <td class="text-end">{{fmtMoney $r.Bruto}}</td>
-          <td class="text-end">{{fmtMoney $r.PPN}}</td>
-          <td class="text-end">{{fmtMoney $r.PPH}}</td>
-          <td class="text-end">{{fmtMoney $r.BiayaAdmin}}</td>
+          {{if $.SelBruto}}<td class="text-end">{{fmtMoney $r.Bruto}}</td>{{end}}
+          {{if $.SelPotongan}}<td class="text-end">{{fmtMoney (add $r.PPN $r.PPH)}}</td>{{end}}
+          {{if $.SelSetelahPajak}}<td class="text-end">{{fmtMoney $r.Netto}}</td>{{end}}
+          {{if $.SelBiayaAdmin}}<td class="text-end">{{fmtMoney $r.BiayaAdmin}}</td>{{end}}
+          {{if $.SelDitransfer}}<td class="text-end">{{fmtMoney (sub $r.Netto $r.BiayaAdmin)}}</td>{{end}}
         </tr>
         {{else}}
-        <tr><td colspan="8" class="text-center text-muted">Belum ada tagihan.</td></tr>
+        <tr><td colspan="{{.NumCols}}" class="text-center text-muted">Belum ada tagihan.</td></tr>
         {{end}}
       </tbody>
       <tfoot class="table-light fw-bold">
-        <tr><td colspan="4" class="text-end">TOTAL</td><td class="text-end">{{fmtMoney .TotBruto}}</td><td class="text-end">{{fmtMoney .TotPPN}}</td><td class="text-end">{{fmtMoney .TotPPh}}</td><td class="text-end">{{fmtMoney .TotBiayaAdmin}}</td></tr>
+        <tr>
+          <td colspan="{{.MergeCols}}" class="text-end">TOTAL</td>
+          {{if .SelBruto}}<td class="text-end">{{fmtMoney .TotBruto}}</td>{{end}}
+          {{if .SelPotongan}}<td class="text-end">{{fmtMoney .TotPotongan}}</td>{{end}}
+          {{if .SelSetelahPajak}}<td class="text-end">{{fmtMoney .TotSetelahPajak}}</td>{{end}}
+          {{if .SelBiayaAdmin}}<td class="text-end">{{fmtMoney .TotBiayaAdmin}}</td>{{end}}
+          {{if .SelDitransfer}}<td class="text-end">{{fmtMoney .TotDitransfer}}</td>{{end}}
+        </tr>
       </tfoot>
     </table>
   </div>

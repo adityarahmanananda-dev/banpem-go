@@ -268,27 +268,55 @@ func (s *Server) buildRekapPajak(ctx context.Context, b *store.Bantuan, tglCetak
 	return rep, nil
 }
 
-// buildRekapBelanja membuat laporan Rekap Belanja.
-func (s *Server) buildRekapBelanja(ctx context.Context, b *store.Bantuan, tglCetak time.Time) (export.Report, error) {
+// buildRekapBelanja membuat laporan Rekap Belanja. Jika filtTanggal tidak nil,
+// hanya transaksi pada tanggal tersebut yang disertakan (untuk serah ke bank).
+// Kolom angka yang tampil mengikuti pilihan colOpts.
+func (s *Server) buildRekapBelanja(ctx context.Context, b *store.Bantuan, tglCetak time.Time, filtTanggal *time.Time, colOpts rekapBelanjaColOpts) (export.Report, error) {
 	rows, err := s.Store.ListBelanja(ctx, b.ID)
 	if err != nil {
 		return export.Report{}, err
 	}
+	if filtTanggal != nil {
+		rows = filterBelanjaTanggal(rows, *filtTanggal)
+	}
 	cols := []export.Col{
 		{Header: "No", Width: 8, ExWidth: 6},
-		{Header: "Kegiatan / Sub Kegiatan / Aktivitas", Width: 46, ExWidth: 30, Wrap: true, Flex: true, Left: true},
-		{Header: "Uraian Tagihan", Width: 40, ExWidth: 26, Wrap: true, Flex: true},
-		{Header: "Penyedia / Bank / No.Rek / NPWP", Width: 64, ExWidth: 34, Wrap: true, Flex: true, Top: true},
-		{Header: "Bruto", Width: 21, ExWidth: 18, Num: true},
-		{Header: "PPN", Width: 19, ExWidth: 16, Num: true},
-		{Header: "PPh", Width: 19, ExWidth: 16, Num: true},
-		{Header: "Biaya Admin", Width: 21, ExWidth: 16, Num: true},
+		{Header: "Tanggal", Width: 17, ExWidth: 13, Center: true},
+	}
+	if colOpts.Kegiatan {
+		cols = append(cols, export.Col{Header: "Kegiatan / Sub Kegiatan / Aktivitas", Width: 46, ExWidth: 30, Wrap: true, Flex: true, Left: true})
+	}
+	cols = append(cols,
+		export.Col{Header: "Uraian Tagihan", Width: 40, ExWidth: 26, Wrap: true, Flex: true},
+		export.Col{Header: "Penyedia / Bank / No.Rek / NPWP", Width: 64, ExWidth: 34, Wrap: true, Flex: true, Top: true},
+	)
+	numCol := func(header string) export.Col {
+		return export.Col{Header: header, Width: 21, ExWidth: 16, Num: true}
+	}
+	if colOpts.Bruto {
+		cols = append(cols, numCol("Bruto"))
+	}
+	if colOpts.Potongan {
+		cols = append(cols, numCol("Potongan Pajak"))
+	}
+	if colOpts.SetelahPajak {
+		cols = append(cols, numCol("Setelah Potong Pajak"))
+	}
+	if colOpts.BiayaAdmin {
+		cols = append(cols, numCol("Biaya Admin"))
+	}
+	if colOpts.Ditransfer {
+		cols = append(cols, numCol("Ditransfer"))
+	}
+	totalMerge := 4
+	if colOpts.Kegiatan {
+		totalMerge = 5
 	}
 	rep := export.Report{
 		Title:      "REKAP BELANJA",
 		Subtitle:   b.Nama,
 		Cols:       cols,
-		TotalMerge: 4,
+		TotalMerge: totalMerge,
 		Landscape:  true,
 		Sig:        sigData(b, tglCetak),
 	}
@@ -299,18 +327,56 @@ func (s *Server) buildRekapBelanja(ctx context.Context, b *store.Bantuan, tglCet
 			"NPWP: " + formatNPWP(r.NPWP),
 		}, "\n")
 	}
-	var tBruto, tPPN, tPPh, tAdmin int64
+	var tBruto, tPotongan, tSetelah, tAdmin, tDitransfer int64
 	for i, r := range rows {
-		rep.Rows = append(rep.Rows, []any{
-			i + 1, kegiatanRich(r), r.Uraian, penyedia(r),
-			r.Bruto, r.PPN, r.PPH, r.BiayaAdmin,
-		})
+		row := []any{i + 1, r.Tanggal.Format("02-01-2006")}
+		if colOpts.Kegiatan {
+			row = append(row, kegiatanRich(r))
+		}
+		row = append(row, r.Uraian, penyedia(r))
+		if colOpts.Bruto {
+			row = append(row, r.Bruto)
+		}
+		if colOpts.Potongan {
+			row = append(row, r.PPN+r.PPH)
+		}
+		if colOpts.SetelahPajak {
+			row = append(row, r.Netto)
+		}
+		if colOpts.BiayaAdmin {
+			row = append(row, r.BiayaAdmin)
+		}
+		if colOpts.Ditransfer {
+			row = append(row, r.Netto-r.BiayaAdmin)
+		}
+		rep.Rows = append(rep.Rows, row)
 		tBruto += r.Bruto
-		tPPN += r.PPN
-		tPPh += r.PPH
+		tPotongan += r.PPN + r.PPH
+		tSetelah += r.Netto
 		tAdmin += r.BiayaAdmin
+		tDitransfer += r.Netto - r.BiayaAdmin
 	}
-	rep.TotalRow = []any{"TOTAL", "", "", "", tBruto, tPPN, tPPh, tAdmin}
+	totalRow := []any{"TOTAL", ""}
+	if colOpts.Kegiatan {
+		totalRow = append(totalRow, "")
+	}
+	totalRow = append(totalRow, "", "")
+	if colOpts.Bruto {
+		totalRow = append(totalRow, tBruto)
+	}
+	if colOpts.Potongan {
+		totalRow = append(totalRow, tPotongan)
+	}
+	if colOpts.SetelahPajak {
+		totalRow = append(totalRow, tSetelah)
+	}
+	if colOpts.BiayaAdmin {
+		totalRow = append(totalRow, tAdmin)
+	}
+	if colOpts.Ditransfer {
+		totalRow = append(totalRow, tDitransfer)
+	}
+	rep.TotalRow = totalRow
 	return rep, nil
 }
 
@@ -543,6 +609,51 @@ func rekapPenggunaanOptsFromQuery(q url.Values) rekapPenggunaanOpts {
 		Komponen:  q.Get("komponen") == "1",
 		Pajak:     q.Get("pajak") == "1",
 	}
+}
+
+// rekapBelanjaColOpts berisi pilihan kolom Rekap Belanja. Kolom deskriptif
+// (No, Tanggal, Penyedia, Uraian) selalu tampil; Kegiatan & kolom angka dapat
+// dipilih lewat query string.
+type rekapBelanjaColOpts struct {
+	Kegiatan     bool // Kegiatan / Sub Kegiatan / Aktivitas
+	Bruto        bool // Bruto
+	Potongan     bool // Nilai Potongan Pajak (PPN+PPh)
+	SetelahPajak bool // Nilai Setelah Potong Pajak (Bruto - PPN - PPh)
+	BiayaAdmin   bool // Biaya Admin
+	Ditransfer   bool // Biaya Ditransfer ke Pihak Ketiga (Bruto - PPN - PPh - Biaya Admin)
+}
+
+// Count menghitung banyak kolom angka yang dipilih.
+func (o rekapBelanjaColOpts) Count() int {
+	n := 0
+	for _, b := range []bool{o.Bruto, o.Potongan, o.SetelahPajak, o.BiayaAdmin, o.Ditransfer} {
+		if b {
+			n++
+		}
+	}
+	return n
+}
+
+// rekapBelanjaColOptsFromQuery membaca pilihan kolom Rekap Belanja dari query
+// string. Tanpa parameter sama sekali -> semua kolom tampil (default). Bila ada
+// parameter, kolom yang tidak disertakan ("1" = tampil) dianggap disembunyikan.
+func rekapBelanjaColOptsFromQuery(q url.Values) rekapBelanjaColOpts {
+	o := rekapBelanjaColOpts{
+		Kegiatan: true, Bruto: true, Potongan: true,
+		SetelahPajak: true, BiayaAdmin: true, Ditransfer: true,
+	}
+	for _, c := range []string{"kegiatan", "bruto", "potongan", "setelah_pajak", "biaya_admin", "ditransfer"} {
+		if _, ok := q[c]; ok {
+			o.Kegiatan = q.Get("kegiatan") == "1"
+			o.Bruto = q.Get("bruto") == "1"
+			o.Potongan = q.Get("potongan") == "1"
+			o.SetelahPajak = q.Get("setelah_pajak") == "1"
+			o.BiayaAdmin = q.Get("biaya_admin") == "1"
+			o.Ditransfer = q.Get("ditransfer") == "1"
+			break
+		}
+	}
+	return o
 }
 
 // rekapPenggunaanDistCols mengembalikan kolom angka distribusi untuk level

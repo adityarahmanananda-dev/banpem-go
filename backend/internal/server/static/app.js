@@ -39,7 +39,7 @@
         // Bawa pilihan kolom tambahan halaman (mis. rekap penggunaan dana)
         // sebagai hidden input agar ikut dikirim saat export.
         var params = new URLSearchParams(window.location.search);
-        ["kegiatan", "sub_kegiatan", "aktivitas", "komponen", "pajak"].forEach(function (name) {
+        ["kegiatan", "sub_kegiatan", "aktivitas", "komponen", "pajak", "tanggal", "bruto", "potongan", "setelah_pajak", "biaya_admin", "ditransfer"].forEach(function (name) {
           var v = params.get(name);
           if (v) {
             var input = document.createElement("input");
@@ -194,9 +194,9 @@
     var pph = document.getElementById("pvPph");
     var admin = document.getElementById("pvAdmin");
     if (!bruto || !ppn || !pph || !admin) return;
-    var b = parseInt(digitsOnly(bruto.value) || "0", 10);
-    var p = parseInt(digitsOnly(ppn.value) || "0", 10);
-    var h = parseInt(digitsOnly(pph.value) || "0", 10);
+    var b = parseInt(digitsOnly(bruto.value) || "0", 10) * 100;
+    var p = parseInt(digitsOnly(ppn.value) || "0", 10) * 100;
+    var h = parseInt(digitsOnly(pph.value) || "0", 10) * 100;
     var a = parseInt(admin.getAttribute("data-sen") || "0", 10);
     document.getElementById("pvNetto").textContent = moneyDisp(b - p - h - a);
   }

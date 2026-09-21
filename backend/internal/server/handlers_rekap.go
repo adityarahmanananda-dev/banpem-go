@@ -71,27 +71,75 @@ func (s *Server) handleRekapBelanja(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
-	var tBruto, tPPN, tPPh, tAdmin int64
+	var filtTanggal *time.Time
+	selTanggal := r.URL.Query().Get("tanggal")
+	if selTanggal != "" {
+		if t, err := time.Parse("2006-01-02", selTanggal); err == nil {
+			filtTanggal = &t
+		}
+	}
+	if filtTanggal != nil {
+		rows = filterBelanjaTanggal(rows, *filtTanggal)
+	}
+	colOpts := rekapBelanjaColOptsFromQuery(r.URL.Query())
+	var tBruto, tPotongan, tSetelah, tAdmin, tDitransfer int64
 	for _, rw := range rows {
 		tBruto += rw.Bruto
-		tPPN += rw.PPN
-		tPPh += rw.PPH
+		tPotongan += rw.PPN + rw.PPH
+		tSetelah += rw.Netto
 		tAdmin += rw.BiayaAdmin
+		tDitransfer += rw.Netto - rw.BiayaAdmin
 	}
 	ft, fm := s.getFlash(w, r)
 	data := struct {
 		baseView
-		Rows          []store.BelanjaRow
-		TotBruto      int64
-		TotPPN        int64
-		TotPPh        int64
-		TotBiayaAdmin int64
+		Rows            []store.BelanjaRow
+		TotBruto        int64
+		TotPotongan     int64
+		TotSetelahPajak int64
+		TotBiayaAdmin   int64
+		TotDitransfer   int64
+		SelTanggal      string
+		SelTanggalTime  time.Time
+		SelKegiatan     bool
+		SelBruto        bool
+		SelPotongan     bool
+		SelSetelahPajak bool
+		SelBiayaAdmin   bool
+		SelDitransfer   bool
+		MergeCols       int
+		NumCols         int
 	}{
 		baseView: baseView{Title: "Rekap Belanja", Active: "rekap-belanja", FlashType: ft, FlashMsg: fm,
 			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
-		Rows: rows, TotBruto: tBruto, TotPPN: tPPN, TotPPh: tPPh, TotBiayaAdmin: tAdmin,
+		Rows: rows, TotBruto: tBruto, TotPotongan: tPotongan, TotSetelahPajak: tSetelah,
+		TotBiayaAdmin: tAdmin, TotDitransfer: tDitransfer,
+		SelTanggal: selTanggal, SelTanggalTime: time.Time{},
+		SelKegiatan: colOpts.Kegiatan, SelBruto: colOpts.Bruto, SelPotongan: colOpts.Potongan,
+		SelSetelahPajak: colOpts.SetelahPajak,
+		SelBiayaAdmin:   colOpts.BiayaAdmin, SelDitransfer: colOpts.Ditransfer,
+		MergeCols: 4, NumCols: 4 + colOpts.Count(),
+	}
+	if colOpts.Kegiatan {
+		data.MergeCols = 5
+		data.NumCols++
+	}
+	if filtTanggal != nil {
+		data.SelTanggalTime = *filtTanggal
 	}
 	s.render(w, r, "rekap_belanja.html", data)
+}
+
+// filterBelanjaTanggal menyaring baris Rekap Belanja agar hanya transaksi pada
+// tanggal yang dipilih (dipakai untuk cetak serah ke bank).
+func filterBelanjaTanggal(rows []store.BelanjaRow, t time.Time) []store.BelanjaRow {
+	var out []store.BelanjaRow
+	for _, r := range rows {
+		if r.Tanggal.Year() == t.Year() && r.Tanggal.YearDay() == t.YearDay() {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // handleInvoiceReorder menyimpan urutan invoice (drag-and-drop) dari halaman
