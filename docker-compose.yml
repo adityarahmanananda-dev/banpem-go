@@ -1,5 +1,6 @@
 services:
   app:
+    restart: unless-stopped
     build: ./backend
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL di file .env}
