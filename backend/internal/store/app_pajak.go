@@ -177,6 +177,15 @@ func (s *Store) UpdateSetorPajak(ctx context.Context, setorID int64, in SetorInp
 				tgl, nomorBukti, uraian, nominal, bankID); err != nil {
 				return err
 			}
+		} else {
+			// Pasangan bank tidak ditemukan (mis. data lama) -> buat baru agar
+			// entri setor pajak tetap ada di kedua buku.
+			if _, err := AppendBankLedger(ctx, tx, LedgerEntry{
+				BantuanID: in.BantuanID, Tanggal: &tgl, NomorBukti: nomorBukti, Uraian: uraian,
+				Debit: nominal, Kredit: 0, JenisTransaksi: "setor_pajak",
+			}); err != nil {
+				return err
+			}
 		}
 		return RebuildLedger(ctx, tx, in.BantuanID, "bank")
 	})
