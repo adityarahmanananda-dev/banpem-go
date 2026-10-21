@@ -15,8 +15,9 @@
       <dt class="col-sm-3">Uraian</dt><dd class="col-sm-9">{{.Inv.Uraian}}</dd>
       <dt class="col-sm-3">Jenis</dt><dd class="col-sm-9">{{jenisMenuLabel .Inv.JenisMenu}}</dd>
       <dt class="col-sm-3">Nama Rekening</dt><dd class="col-sm-9">{{.Inv.NamaRekening}}</dd>
-      <dt class="col-sm-3">Bank</dt><dd class="col-sm-9">{{.Inv.Bank}}</dd>
+      <dt class="col-sm-3">Bank</dt><dd class="col-sm-9">{{if .Inv.Bank}}{{.Inv.Bank}}{{else}}Tunai{{end}}</dd>
       <dt class="col-sm-3">No. Rekening</dt><dd class="col-sm-9">{{.Inv.NomorRekening}}</dd>
+      <dt class="col-sm-3">Biaya Admin</dt><dd class="col-sm-9">{{$adm := adminFee .Bantuan.Bank .Inv.Bank .Inv.JenisBiayaAdmin}}{{if $adm}}{{fmtMoney $adm}} ({{if eq .Inv.JenisBiayaAdmin "rtgs"}}RTGS{{else}}Kliring{{end}}){{else}}-{{end}}</dd>
       <dt class="col-sm-3">NPWP</dt><dd class="col-sm-9">{{formatNPWP .Inv.NPWP}}</dd>
       <dt class="col-sm-3">No. Bupot PPN / PPh</dt><dd class="col-sm-9">{{.Inv.NomorBupotPPN}} / {{.Inv.NomorBupotPPH}}</dd>
     </dl>

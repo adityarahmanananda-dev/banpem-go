@@ -49,6 +49,7 @@ type Invoice struct {
 	NomorBupotPPN        string
 	NomorBupotPPH        string
 	BiayaAdminDibebankan string
+	JenisBiayaAdmin      string
 	SortOrder            int
 }
 

@@ -41,7 +41,8 @@
       </div>
       <div class="col-md-4">
         <label class="form-label">Bank</label>
-        <input type="text" class="form-control" name="bank" id="bank" value="{{if .Inv}}{{.Inv.Bank}}{{end}}">
+        <input type="text" class="form-control" name="bank" id="bank" placeholder="Kosongkan untuk tunai" value="{{if .Inv}}{{.Inv.Bank}}{{end}}">
+        <div class="form-text">Tanpa bank berarti pembayaran tunai (tanpa biaya admin).</div>
       </div>
       <div class="col-md-4">
         <label class="form-label">Nomor Rekening</label>
@@ -61,6 +62,13 @@
           <input class="form-check-input" type="radio" name="biaya_admin_dibebankan" id="admYa" value="ya" {{if .Inv}}{{if eq .Inv.BiayaAdminDibebankan "ya"}}checked{{end}}{{end}}>
           <label class="form-check-label" for="admYa">Ya</label>
         </div>
+      </div>
+      <div class="col-md-4 d-none" id="jenisBiayaAdminWrap">
+        <label class="form-label">Jenis Biaya Admin</label>
+        <select class="form-select" name="jenis_biaya_admin" id="jenisBiayaAdmin">
+          <option value="kliring" {{if or (not .Inv) (eq .Inv.JenisBiayaAdmin "kliring")}}selected{{end}}>Kliring (Rp 2.900)</option>
+          <option value="rtgs" {{if .Inv}}{{if eq .Inv.JenisBiayaAdmin "rtgs"}}selected{{end}}{{end}}>RTGS (Rp 30.000)</option>
+        </select>
       </div>
 
       <div class="col-12" id="pajakMenu1">

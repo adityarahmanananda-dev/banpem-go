@@ -210,6 +210,8 @@
       flag_pph: document.querySelector(".flag-pph").value,
       bank: document.getElementById("bank").value
     });
+    var jenisAdmin = document.getElementById("jenisBiayaAdmin");
+    if (jenisAdmin) params.set("jenis_biaya_admin", jenisAdmin.value);
     var kat = document.querySelector('select[name="kategori_narasumber"]');
     if (kat && kat.value) params.set("kategori_narasumber", kat.value);
     fetch("/api/bantuan/" + window.BANTUAN_ID + "/hitung-pajak?" + params.toString())
@@ -226,16 +228,33 @@
       })
       .catch(function () {});
   }
+  // Jenis biaya admin hanya relevan bila bank penerima diisi dan berbeda dari
+  // bank bantuan. Bank kosong = tunai (tanpa biaya admin).
+  function toggleJenisBiayaAdmin() {
+    var wrap = document.getElementById("jenisBiayaAdminWrap");
+    var bankEl = document.getElementById("bank");
+    if (!wrap || !bankEl) return;
+    var bank = (bankEl.value || "").trim().toLowerCase();
+    var bankBantuan = String(window.BANK_BANTUAN || "").trim().toLowerCase();
+    wrap.classList.toggle("d-none", !(bank !== "" && bank !== bankBantuan));
+  }
+
   var brutoEl = document.getElementById("bruto");
   if (brutoEl && window.BANTUAN_ID) {
     var pajakTriggers = [
-      "jenisMenu", "bruto", "bank"
+      "jenisMenu", "bruto", "bank", "jenisBiayaAdmin"
     ].map(function (id) { return document.getElementById(id); }).filter(Boolean);
     pajakTriggers.push.apply(pajakTriggers, document.querySelectorAll(".flag-ppn, .flag-pph, select[name=kategori_narasumber]"));
     pajakTriggers.forEach(function (el) {
       el.addEventListener("change", hitungPajak);
       el.addEventListener("input", hitungPajak);
     });
+    var bankInput = document.getElementById("bank");
+    if (bankInput) {
+      bankInput.addEventListener("input", toggleJenisBiayaAdmin);
+      bankInput.addEventListener("change", toggleJenisBiayaAdmin);
+    }
+    toggleJenisBiayaAdmin();
     // Koreksi manual PPN/PPh ikut menghitung ulang netto.
     ["pvPpn", "pvPph"].forEach(function (id) {
       var el = document.getElementById(id);

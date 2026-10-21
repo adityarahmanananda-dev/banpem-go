@@ -139,6 +139,7 @@ func parseInvoiceForm(r *http.Request) (store.InvoiceInput, error) {
 		NomorBupotPPN:        formStr(r, "nomor_bupot_ppn"),
 		NomorBupotPPH:        invoiceBupotPPH(r),
 		BiayaAdminDibebankan: formStr(r, "biaya_admin_dibebankan"),
+		JenisBiayaAdmin:      formStr(r, "jenis_biaya_admin"),
 	}
 	if in.JenisMenu == 0 {
 		in.JenisMenu = 1
@@ -152,6 +153,7 @@ func parseInvoiceForm(r *http.Request) (store.InvoiceInput, error) {
 	if in.BiayaAdminDibebankan == "" {
 		in.BiayaAdminDibebankan = "tidak"
 	}
+	in.JenisBiayaAdmin = store.NormalizeJenisBiayaAdmin(in.JenisBiayaAdmin)
 	// Koreksi nilai pajak (bila diisi, menggantikan hasil perhitungan).
 	if s := formStr(r, "ppn"); s != "" {
 		if v, err := money.Parse(s); err == nil {
@@ -396,7 +398,7 @@ func (s *Server) handleAPIHitungPajak(w http.ResponseWriter, r *http.Request) {
 	var admin int64
 	if err == nil {
 		if b, err := s.Store.GetBantuan(r.Context(), id); err == nil {
-			admin = store.AdminFee(b.Bank, r.URL.Query().Get("bank"))
+			admin = store.AdminFee(b.Bank, r.URL.Query().Get("bank"), r.URL.Query().Get("jenis_biaya_admin"))
 		}
 	}
 	var jenisPPH *string

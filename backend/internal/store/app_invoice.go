@@ -9,14 +9,47 @@ import (
 	"ebku/internal/tax"
 )
 
-// AdminFee mengembalikan 2900 (dalam sen) bila bank penerima berbeda dari bank
-// bantuan (case-insensitive); selain itu 0.
-func AdminFee(bankBantuan, bankPenerima string) int64 {
-	if bankBantuan != "" && bankPenerima != "" &&
-		strings.ToLower(bankPenerima) != strings.ToLower(bankBantuan) {
-		return 290000
+const (
+	JenisBiayaAdminKliring = "kliring"
+	JenisBiayaAdminRTGS    = "rtgs"
+
+	// Biaya admin transfer dalam sen.
+	AdminFeeKliring int64 = 290000  // Rp 2.900
+	AdminFeeRTGS    int64 = 3000000 // Rp 30.000
+)
+
+// NormalizeJenisBiayaAdmin memastikan jenis biaya admin hanya 'rtgs' atau
+// 'kliring' (default).
+func NormalizeJenisBiayaAdmin(v string) string {
+	if strings.EqualFold(strings.TrimSpace(v), JenisBiayaAdminRTGS) {
+		return JenisBiayaAdminRTGS
 	}
-	return 0
+	return JenisBiayaAdminKliring
+}
+
+// JenisBiayaAdminLabel mengembalikan label tampilan jenis biaya admin.
+func JenisBiayaAdminLabel(v string) string {
+	if NormalizeJenisBiayaAdmin(v) == JenisBiayaAdminRTGS {
+		return "RTGS"
+	}
+	return "Kliring"
+}
+
+// AdminFee mengembalikan biaya admin transfer (dalam sen). Bank penerima kosong
+// berarti pembayaran tunai sehingga tidak ada biaya admin. Biaya hanya
+// dikenakan bila bank penerima berbeda dari bank bantuan (case-insensitive),
+// dengan nominal sesuai jenis biaya admin (Kliring/RTGS).
+func AdminFee(bankBantuan, bankPenerima, jenisBiayaAdmin string) int64 {
+	if bankBantuan == "" || bankPenerima == "" {
+		return 0
+	}
+	if strings.EqualFold(bankPenerima, bankBantuan) {
+		return 0
+	}
+	if NormalizeJenisBiayaAdmin(jenisBiayaAdmin) == JenisBiayaAdminRTGS {
+		return AdminFeeRTGS
+	}
+	return AdminFeeKliring
 }
 
 type RealisasiInput struct {
@@ -40,6 +73,7 @@ type InvoiceInput struct {
 	NomorBupotPPN        string
 	NomorBupotPPH        string
 	BiayaAdminDibebankan string
+	JenisBiayaAdmin      string
 	Realisasi            []RealisasiInput
 	// PPNOverride/PPHOverride membiarkan user mengoreksi hasil perhitungan
 	// pajak (mis. selisih pembulatan). Nilai pointer bila diisi dipakai
@@ -76,12 +110,13 @@ func getInvoiceQ(ctx context.Context, q Querier, id int64) (Invoice, error) {
 	err := q.QueryRow(ctx, `SELECT id, bantuan_id, tanggal, nomor_bukti, uraian, bruto,
 		jenis_menu, flag_ppn, flag_pph, kategori_narasumber, dpp, dpp_nilai_lain,
 		nilai_ppn, nilai_pph, jenis_pph, nilai_netto, nama_rekening, nomor_rekening,
-		bank, npwp, nomor_bupot_ppn, nomor_bupot_pph, biaya_admin_dibebankan, sort_order
+		bank, npwp, nomor_bupot_ppn, nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order
 		FROM trx_invoice WHERE id=$1`, id).Scan(
 		&i.ID, &i.BantuanID, &i.Tanggal, &i.NomorBukti, &i.Uraian, &i.Bruto,
 		&i.JenisMenu, &i.FlagPpn, &i.FlagPph, &i.KategoriNarasumber, &i.DPP, &i.DPPNilaiLain,
 		&i.NilaiPPN, &i.NilaiPPH, &i.JenisPPH, &i.NilaiNetto, &i.NamaRekening, &i.NomorRekening,
-		&i.Bank, &i.NPWP, &i.NomorBupotPPN, &i.NomorBupotPPH, &i.BiayaAdminDibebankan, &i.SortOrder)
+		&i.Bank, &i.NPWP, &i.NomorBupotPPN, &i.NomorBupotPPH, &i.BiayaAdminDibebankan,
+		&i.JenisBiayaAdmin, &i.SortOrder)
 	return i, err
 }
 
@@ -123,7 +158,8 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 		}
 		res := tax.Hitung(in.Bruto, in.JenisMenu, in.FlagPpn, in.FlagPph, in.KategoriNarasumber)
 		ppn, pph := hitungPajakEfektif(in, res)
-		admin := AdminFee(b.Bank, in.Bank)
+		jenisAdmin := NormalizeJenisBiayaAdmin(in.JenisBiayaAdmin)
+		admin := AdminFee(b.Bank, in.Bank, jenisAdmin)
 		nettoFinal := in.Bruto - ppn - pph - admin
 
 		var sortOrder int
@@ -143,14 +179,14 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 			(bantuan_id, tanggal, nomor_bukti, uraian, bruto, jenis_menu, flag_ppn, flag_pph,
 			 kategori_narasumber, dpp, dpp_nilai_lain, nilai_ppn, nilai_pph, jenis_pph,
 			 nilai_netto, nama_rekening, nomor_rekening, bank, npwp, nomor_bupot_ppn,
-			 nomor_bupot_pph, biaya_admin_dibebankan, sort_order)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+			 nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
 			RETURNING id`,
 			bantuanID, in.Tanggal, in.NomorBukti, in.Uraian, in.Bruto, in.JenisMenu,
 			in.FlagPpn, in.FlagPph, in.KategoriNarasumber, res.DPP, res.DPPNilaiLain,
 			ppn, pph, jenisPPH, nettoFinal, in.NamaRekening, in.NomorRekening,
 			in.Bank, in.NPWP, in.NomorBupotPPN, in.NomorBupotPPH, in.BiayaAdminDibebankan,
-			sortOrder).Scan(&iid)
+			jenisAdmin, sortOrder).Scan(&iid)
 		if err != nil {
 			return err
 		}
@@ -198,7 +234,7 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 		}
 		if admin > 0 {
 			if _, err := AppendBankLedger(ctx, tx, LedgerEntry{
-				BantuanID: bantuanID, Tanggal: &tgl, NomorBukti: in.NomorBukti, Uraian: "Biaya Admin untuk " + in.Uraian,
+				BantuanID: bantuanID, Tanggal: &tgl, NomorBukti: in.NomorBukti, Uraian: "Biaya Admin " + JenisBiayaAdminLabel(jenisAdmin) + " untuk " + in.Uraian,
 				Debit: admin, Kredit: 0, InvoiceID: &iidPtr, JenisTransaksi: "biaya_admin",
 			}); err != nil {
 				return err
@@ -243,7 +279,8 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 
 		res := tax.Hitung(in.Bruto, in.JenisMenu, in.FlagPpn, in.FlagPph, in.KategoriNarasumber)
 		ppn, pph := hitungPajakEfektif(in, res)
-		admin := AdminFee(b.Bank, in.Bank)
+		jenisAdmin := NormalizeJenisBiayaAdmin(in.JenisBiayaAdmin)
+		admin := AdminFee(b.Bank, in.Bank, jenisAdmin)
 		nettoFinal := in.Bruto - ppn - pph - admin
 		jenisPPH := ""
 		if res.JenisPPH != nil {
@@ -253,12 +290,14 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 			tanggal=$1, nomor_bukti=$2, uraian=$3, bruto=$4, jenis_menu=$5, flag_ppn=$6,
 			flag_pph=$7, kategori_narasumber=$8, dpp=$9, dpp_nilai_lain=$10, nilai_ppn=$11,
 			nilai_pph=$12, jenis_pph=$13, nilai_netto=$14, nama_rekening=$15, nomor_rekening=$16,
-			bank=$17, npwp=$18, nomor_bupot_ppn=$19, nomor_bupot_pph=$20, biaya_admin_dibebankan=$21
-			WHERE id=$22`,
+			bank=$17, npwp=$18, nomor_bupot_ppn=$19, nomor_bupot_pph=$20, biaya_admin_dibebankan=$21,
+			jenis_biaya_admin=$22
+			WHERE id=$23`,
 			in.Tanggal, in.NomorBukti, in.Uraian, in.Bruto, in.JenisMenu, in.FlagPpn,
 			in.FlagPph, in.KategoriNarasumber, res.DPP, res.DPPNilaiLain, ppn,
 			pph, jenisPPH, nettoFinal, in.NamaRekening, in.NomorRekening,
-			in.Bank, in.NPWP, in.NomorBupotPPN, in.NomorBupotPPH, in.BiayaAdminDibebankan, iid); err != nil {
+			in.Bank, in.NPWP, in.NomorBupotPPN, in.NomorBupotPPH, in.BiayaAdminDibebankan,
+			jenisAdmin, iid); err != nil {
 			return err
 		}
 		if err := saveRealisasi(ctx, tx, iid, in.Realisasi, ppn, pph); err != nil {
@@ -301,7 +340,7 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 		}
 		if admin > 0 {
 			if _, err := AppendBankLedger(ctx, tx, LedgerEntry{
-				BantuanID: inv.BantuanID, Tanggal: &tgl, NomorBukti: in.NomorBukti, Uraian: "Biaya Admin untuk " + in.Uraian,
+				BantuanID: inv.BantuanID, Tanggal: &tgl, NomorBukti: in.NomorBukti, Uraian: "Biaya Admin " + JenisBiayaAdminLabel(jenisAdmin) + " untuk " + in.Uraian,
 				Debit: admin, Kredit: 0, InvoiceID: &iidPtr, JenisTransaksi: "biaya_admin",
 			}); err != nil {
 				return err
@@ -364,7 +403,7 @@ func (s *Store) ListInvoices(ctx context.Context, bantuanID int64, order string)
 	rows, err := s.Pool.Query(ctx, `SELECT id, bantuan_id, tanggal, nomor_bukti, uraian, bruto,
 		jenis_menu, flag_ppn, flag_pph, kategori_narasumber, dpp, dpp_nilai_lain,
 		nilai_ppn, nilai_pph, jenis_pph, nilai_netto, nama_rekening, nomor_rekening,
-		bank, npwp, nomor_bupot_ppn, nomor_bupot_pph, biaya_admin_dibebankan, sort_order
+		bank, npwp, nomor_bupot_ppn, nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order
 		FROM trx_invoice WHERE bantuan_id=$1 `+sqlOrder, bantuanID)
 	if err != nil {
 		return nil, err
@@ -376,7 +415,8 @@ func (s *Store) ListInvoices(ctx context.Context, bantuanID int64, order string)
 		if err := rows.Scan(&i.ID, &i.BantuanID, &i.Tanggal, &i.NomorBukti, &i.Uraian, &i.Bruto,
 			&i.JenisMenu, &i.FlagPpn, &i.FlagPph, &i.KategoriNarasumber, &i.DPP, &i.DPPNilaiLain,
 			&i.NilaiPPN, &i.NilaiPPH, &i.JenisPPH, &i.NilaiNetto, &i.NamaRekening, &i.NomorRekening,
-			&i.Bank, &i.NPWP, &i.NomorBupotPPN, &i.NomorBupotPPH, &i.BiayaAdminDibebankan, &i.SortOrder); err != nil {
+			&i.Bank, &i.NPWP, &i.NomorBupotPPN, &i.NomorBupotPPH, &i.BiayaAdminDibebankan,
+			&i.JenisBiayaAdmin, &i.SortOrder); err != nil {
 			return nil, err
 		}
 		out = append(out, i)
@@ -433,7 +473,9 @@ func (s *Store) ListBelanja(ctx context.Context, bantuanID int64) ([]BelanjaRow,
 		string_agg(DISTINCT a.nama, E'\n' ORDER BY a.nama),
 		string_agg(DISTINCT ko.nama, E'\n' ORDER BY ko.nama),
 		SUM(r.bruto), SUM(r.nilai_ppn), SUM(r.nilai_pph), SUM(r.nilai_netto),
-		MAX(CASE WHEN lower(i.bank) <> lower(ba.bank) THEN 290000 ELSE 0 END)
+		MAX(CASE WHEN i.bank <> '' AND ba.bank <> '' AND lower(i.bank) <> lower(ba.bank)
+			THEN CASE WHEN lower(i.jenis_biaya_admin) = 'rtgs' THEN 3000000 ELSE 290000 END
+			ELSE 0 END)
 		FROM trx_invoice_realisasi r
 		JOIN trx_invoice i ON i.id = r.invoice_id
 		JOIN bantuan ba ON ba.id = i.bantuan_id

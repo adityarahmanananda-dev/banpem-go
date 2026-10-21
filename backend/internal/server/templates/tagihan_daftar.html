@@ -30,12 +30,12 @@
           <td class="text-break">{{$inv.NomorBukti}}</td>
           <td>{{$inv.Uraian}}</td>
           <td class="small" style="white-space:pre-line">{{$inv.NamaRekening}}
-{{$inv.Bank}}
+{{if $inv.Bank}}{{$inv.Bank}}{{else}}Tunai{{end}}
 {{$inv.NomorRekening}}</td>
           <td class="text-end">{{fmtMoney $inv.Bruto}}</td>
           <td class="text-end">{{fmtMoney $inv.NilaiPPN}}</td>
           <td class="text-end">{{fmtMoney $inv.NilaiPPH}}</td>
-          <td class="text-end">{{fmtMoney (adminFee $.Bantuan.Bank $inv.Bank)}}</td>
+          <td class="text-end">{{fmtMoney (adminFee $.Bantuan.Bank $inv.Bank $inv.JenisBiayaAdmin)}}</td>
           <td class="text-end">{{fmtMoney $inv.NilaiNetto}}</td>
           <td>{{jenisMenuLabel $inv.JenisMenu}}</td>
         </tr>

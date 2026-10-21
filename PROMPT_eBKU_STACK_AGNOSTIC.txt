@@ -207,9 +207,11 @@ SALDO AWAL:
 SAAT MENYIMPAN TAGIHAN BARU (invoice):
 1. Hitung pajak via hitung_pajak.
 2. Hitung biaya_admin:
-     BIAYA_ADMIN = 2.900
-     jika bank_penerima ada DAN bank bantuan ada DAN
-        lowercase(bank_penerima) != lowercase(bank bantuan)  -> biaya_admin = 2900
+     jika bank_penerima kosong -> biaya_admin = 0 (pembayaran tunai)
+     selain itu, jika bank_penerima ada DAN bank bantuan ada DAN
+        lowercase(bank_penerima) != lowercase(bank bantuan):
+          jenis biaya admin 'kliring' -> biaya_admin = 2900
+          jenis biaya admin 'rtgs'    -> biaya_admin = 30000
      selain itu -> 0
 3. nilai_netto_final = hitung_pajak.netto - biaya_admin   (ini yang disimpan
    di TRX_INVOICE.nilai_netto).
@@ -546,7 +548,8 @@ DASHBOARD:
 FORM TAGIHAN (paling kompleks):
 - Field: tanggal, nomor_bukti, uraian, nama_rekening, npwp, bank,
   nomor_rekening, biaya_admin_dibebankan (radio ya/tidak, default tidak),
-  jenis_menu (select), bruto.
+  jenis_biaya_admin (select Kliring/RTGS, default Kliring), jenis_menu (select),
+  bruto. Bank kosong berarti pembayaran tunai (tanpa biaya admin).
 - Field dinamis per jenis_menu:
   * 1 (Barang/Jasa): flag_ppn (radio Ya/Tidak, default Tidak),
     flag_pph (select: Tidak/PPh 22/PPh 23), nomor_bupot_ppn, nomor_bupot_pph.
@@ -555,7 +558,8 @@ FORM TAGIHAN (paling kompleks):
   * 3 (Honor Peserta): nomor_bupot_pph_pst.
   * 4, 5: tidak ada field pajak.
 - Card "Preview Perhitungan Pajak": DPP, DPP Nilai Lain, PPN, Jenis PPh, PPh,
-  Biaya Admin (2900 jika bank berbeda, case-insensitive), Netto. Update
+  Biaya Admin (2900 untuk Kliring / 30000 untuk RTGS bila bank berbeda,
+  case-insensitive; 0 bila bank kosong/tunai), Netto. Update
   real-time oleh JavaScript.
 - Section "Realisasi Kegiatan": baris-baris dinamis
   (Kegiatan select -> Sub Kegiatan select -> Komponen select -> Bruto input)

@@ -492,7 +492,7 @@ func (s *Server) buildDaftarTagihan(ctx context.Context, b *store.Bantuan, tglCe
 		Sig:       sigData(b, tglCetak),
 	}
 	for i, inv := range invoices {
-		admin := store.AdminFee(b.Bank, inv.Bank)
+		admin := store.AdminFee(b.Bank, inv.Bank, inv.JenisBiayaAdmin)
 		rek := strings.Join([]string{inv.NamaRekening, inv.Bank, inv.NomorRekening}, "\n")
 		jenis := menuNames[inv.JenisMenu]
 		if jenis == "" {
