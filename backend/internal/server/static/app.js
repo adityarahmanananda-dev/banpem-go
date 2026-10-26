@@ -24,6 +24,8 @@
     var exportForm = document.getElementById("exportForm");
     var tanggalCetak = document.getElementById("exportTanggalCetak");
     var versiWrap = document.getElementById("exportVersiWrap");
+    var jenisBkuWrap = document.getElementById("exportJenisBkuWrap");
+    var jenisBku = document.getElementById("exportJenisBku");
     var orientasi = document.getElementById("exportOrientasi");
     var today = new Date();
     tanggalCetak.value = today.getFullYear() + "-" +
@@ -56,6 +58,15 @@
           exportForm.versi.value = "rencana";
         } else {
           versiWrap.style.display = "none";
+        }
+        // Pilihan jenis BKU hanya untuk export BKU / Buku Kas Bank.
+        if (link.hasAttribute("data-jenis-bku")) {
+          jenisBkuWrap.style.display = "";
+          jenisBku.value = "sap";
+          jenisBku.disabled = false;
+        } else {
+          jenisBkuWrap.style.display = "none";
+          jenisBku.disabled = true;
         }
         new bootstrap.Modal(exportModalEl).show();
       });

@@ -98,7 +98,11 @@ func (s *Server) ledgerExport(w http.ResponseWriter, r *http.Request, table, kin
 	}
 	tgl, _, versi := exportParams(r)
 	vi := s.versiInfo(r.Context(), id, versi)
-	rep, err := s.buildLedgerReport(r.Context(), &b, table, vi.Base, tgl)
+	jenisBKU := r.URL.Query().Get("jenis_bku")
+	if jenisBKU != "bruto" {
+		jenisBKU = "sap"
+	}
+	rep, err := s.buildLedgerReport(r.Context(), &b, table, vi.Base, tgl, jenisBKU)
 	if err != nil {
 		s.fail(w, r, err, "/")
 		return
@@ -106,6 +110,9 @@ func (s *Server) ledgerExport(w http.ResponseWriter, r *http.Request, table, kin
 	kindName := "BKU"
 	if table == "bank" {
 		kindName = "BukuBank"
+	}
+	if jenisBKU == "bruto" {
+		kindName += "_Bruto"
 	}
 	fname := reportFilename(kindName, b.Nama, tgl)
 	switch kind {

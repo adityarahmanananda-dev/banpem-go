@@ -130,8 +130,8 @@
       <div class="col-12">
         <h6 class="text-primary"><i class="bi bi-calculator"></i> Preview Perhitungan Pajak</h6>
         <div class="row g-1 small" id="taxPreview">
-          <div class="col-6 col-md-2">DPP: <b id="pvDpp">-</b></div>
-          <div class="col-6 col-md-3">DPP Nilai Lain: <b id="pvDppNilai">-</b></div>
+          <div class="col-6 col-md-2">DPP: <b id="pvDpp">{{if .Inv}}{{fmtMoney .Inv.DPP}}{{else}}-{{end}}</b></div>
+          <div class="col-6 col-md-3">DPP Nilai Lain: <b id="pvDppNilai">{{if .Inv}}{{fmtMoney .Inv.DPPNilaiLain}}{{else}}-{{end}}</b></div>
           <div class="col-6 col-md-2">PPN: <input type="text" class="form-control form-control-sm money-input" name="ppn" id="pvPpn" value="{{if .Inv}}{{fmtMoneyNoRp .Inv.NilaiPPN}}{{end}}"></div>
           <div class="col-6 col-md-3">Jenis PPh: <b id="pvJenisPph">-</b></div>
           <div class="col-6 col-md-2">PPh: <input type="text" class="form-control form-control-sm money-input" name="pph" id="pvPph" value="{{if .Inv}}{{fmtMoneyNoRp .Inv.NilaiPPH}}{{end}}"></div>

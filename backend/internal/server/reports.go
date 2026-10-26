@@ -64,23 +64,47 @@ type ledgerReportRow struct {
 
 // buildLedgerReport membuat laporan BKU/Bank. base adalah nilai baris
 // 'saldo_awal' sesuai versi aktif (total hibah di rencana, pencairan pertama
-// di real); saldo berjalan dihitung ulang dari base.
-func (s *Server) buildLedgerReport(ctx context.Context, b *store.Bantuan, table string, base int64, tglCetak time.Time) (export.Report, error) {
+// di real); saldo berjalan dihitung ulang dari base. jenisBKU = "sap"
+// (tampilan apa adanya) atau "bruto" (satu baris per transaksi dengan nilai
+// bruto, tanpa pecahan PPN/PPh/biaya admin).
+func (s *Server) buildLedgerReport(ctx context.Context, b *store.Bantuan, table string, base int64, tglCetak time.Time, jenisBKU string) (export.Report, error) {
 	rows, err := store.ListLedger(ctx, s.Store.Pool, b.ID, table)
 	if err != nil {
 		return export.Report{}, err
 	}
+	brutoMode := jenisBKU == "bruto"
+	brutoByInvoice := map[int64]int64{}
+	if brutoMode {
+		qrows, err := s.Store.Pool.Query(ctx, `SELECT id, bruto FROM trx_invoice WHERE bantuan_id=$1`, b.ID)
+		if err != nil {
+			return export.Report{}, err
+		}
+		defer qrows.Close()
+		for qrows.Next() {
+			var id, bruto int64
+			if err := qrows.Scan(&id, &bruto); err != nil {
+				return export.Report{}, err
+			}
+			brutoByInvoice[id] = bruto
+		}
+		if err := qrows.Err(); err != nil {
+			return export.Report{}, err
+		}
+	}
 	title := "BUKU KAS UMUM"
 	if table == "bank" {
 		title = "BUKU KAS BANK"
+	}
+	if brutoMode {
+		title += " (NILAI BRUTO)"
 	}
 	cols := []export.Col{
 		{Header: "No", Width: 8.7, ExWidth: 8, Center: true},
 		{Header: "Tanggal", Width: 20.9, ExWidth: 14, Center: true},
 		{Header: "No Bukti", Width: 26.1, ExWidth: 16, Wrap: true, Flex: true},
 		{Header: "Uraian", Width: 71.3, ExWidth: 45, Wrap: true, Flex: true},
-		{Header: "Debet (Rp)", Width: 15.7, ExWidth: 18, Num: true},
 		{Header: "Kredit (Rp)", Width: 15.7, ExWidth: 18, Num: true},
+		{Header: "Debet (Rp)", Width: 15.7, ExWidth: 18, Num: true},
 		{Header: "Saldo (Rp)", Width: 15.7, ExWidth: 18, Num: true},
 	}
 	rep := export.Report{
@@ -92,36 +116,64 @@ func (s *Server) buildLedgerReport(ctx context.Context, b *store.Bantuan, table 
 	}
 	var totDebit, totKredit int64
 	running := base
+	n := 0
 	for _, e := range rows {
-		kredit := e.Kredit
-		saldo := e.Saldo
+		if brutoMode {
+			switch e.JenisTransaksi {
+			case "pungut_ppn", "pungut_pph", "biaya_admin", "setor_pajak":
+				// Pecahan pajak/biaya admin dan setor pajak tidak ditampilkan
+				// pada mode bruto.
+				continue
+			}
+		}
+		n++
+		no := e.Nomor
+		debit, kredit := e.Debit, e.Kredit
 		if e.JenisTransaksi == "saldo_awal" {
-			kredit = 0
-			saldo = base
+			if brutoMode {
+				// Saldo awal ditampilkan sebagai dana masuk (kredit).
+				debit = 0
+				kredit = base
+			} else {
+				kredit = 0
+			}
 			running = base
 		} else {
-			running = running - e.Debit + e.Kredit
-			saldo = running
+			if brutoMode {
+				// Satu baris per transaksi: kredit dikosongkan dan nilai
+				// tagihan memakai bruto, bukan netto setelah potongan.
+				kredit = 0
+				if e.JenisTransaksi == "pembayaran" && e.InvoiceID != nil {
+					if v, ok := brutoByInvoice[*e.InvoiceID]; ok {
+						debit = v
+					}
+				}
+			}
+			running = running - debit + kredit
+		}
+		saldo := running
+		if brutoMode {
+			no = n
 		}
 		tanggal := ""
 		if e.Tanggal != nil {
 			tanggal = e.Tanggal.Format("02-01-2006")
 		}
 		// Nilai 0 ditampilkan kosong (kolom tidak diisi), konsisten dengan web.
-		var debitCell, kreditCell any = e.Debit, kredit
-		if e.Debit == 0 {
+		var debitCell, kreditCell any = debit, kredit
+		if debit == 0 {
 			debitCell = nil
 		}
 		if kredit == 0 {
 			kreditCell = nil
 		}
 		rep.Rows = append(rep.Rows, []any{
-			e.Nomor, tanggal, e.NomorBukti, e.Uraian, debitCell, kreditCell, saldo,
+			no, tanggal, e.NomorBukti, e.Uraian, kreditCell, debitCell, saldo,
 		})
-		totDebit += e.Debit
+		totDebit += debit
 		totKredit += kredit
 	}
-	rep.TotalRow = []any{"TOTAL", "", "", "", totDebit, totKredit, ""}
+	rep.TotalRow = []any{"TOTAL", "", "", "", totKredit, totDebit, ""}
 	return rep, nil
 }
 
@@ -131,6 +183,7 @@ type rekapRow struct {
 	Tanggal time.Time
 	Uraian  string
 	Bruto   int64
+	DPP     int64
 	PPN     int64
 	PPh21   int64
 	PPh22   int64
@@ -184,6 +237,7 @@ func (s *Server) buildRekapRows(ctx context.Context, bantuanID int64) ([]rekapRo
 			Tanggal: inv.Tanggal,
 			Uraian:  inv.Uraian,
 			Bruto:   inv.Bruto,
+			DPP:     inv.DPP,
 			PPN:     inv.NilaiPPN,
 			Total:   inv.NilaiPPN + inv.NilaiPPH,
 		}
@@ -237,6 +291,7 @@ func (s *Server) buildRekapPajak(ctx context.Context, b *store.Bantuan, tglCetak
 		{Header: "NTPN", Width: 20, ExWidth: 18, Wrap: true, Flex: true, Top: true},
 		{Header: "Uraian", Width: 70, ExWidth: 45, Wrap: true, Flex: true},
 		{Header: "Nominal (Rp)", Width: 25, ExWidth: 18, Num: true},
+		{Header: "DPP", Width: 22, ExWidth: 16, Num: true},
 		{Header: "PPN", Width: 22, ExWidth: 16, Num: true},
 		{Header: "PPh 21", Width: 22, ExWidth: 16, Num: true},
 		{Header: "PPh 22", Width: 22, ExWidth: 16, Num: true},
@@ -251,20 +306,21 @@ func (s *Server) buildRekapPajak(ctx context.Context, b *store.Bantuan, tglCetak
 		Landscape:  true,
 		Sig:        sigData(b, tglCetak),
 	}
-	var tBruto, tPPN, t21, t22, t23, tTotal int64
+	var tBruto, tDPP, tPPN, t21, t22, t23, tTotal int64
 	for i, r := range rows {
 		rep.Rows = append(rep.Rows, []any{
 			i + 1, r.Tanggal.Format("02-01-2006"), r.NTB, r.NTPN, r.Uraian,
-			r.Bruto, r.PPN, r.PPh21, r.PPh22, r.PPh23, r.Total,
+			r.Bruto, r.DPP, r.PPN, r.PPh21, r.PPh22, r.PPh23, r.Total,
 		})
 		tBruto += r.Bruto
+		tDPP += r.DPP
 		tPPN += r.PPN
 		t21 += r.PPh21
 		t22 += r.PPh22
 		t23 += r.PPh23
 		tTotal += r.Total
 	}
-	rep.TotalRow = []any{"TOTAL", "", "", "", "", tBruto, tPPN, t21, t22, t23, tTotal}
+	rep.TotalRow = []any{"TOTAL", "", "", "", "", tBruto, tDPP, tPPN, t21, t22, t23, tTotal}
 	return rep, nil
 }
 

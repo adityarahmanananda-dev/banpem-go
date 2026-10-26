@@ -27,12 +27,12 @@
         <input type="text" class="form-control" name="uraian" value="{{.E.Uraian}}" required>
       </div>
       <div class="col-md-6">
-        <label class="form-label">Debit (Rp) — uang keluar</label>
-        <input type="text" class="form-control money-input" name="debit" value="{{if .E.Debit}}{{fmtMoneyNoRp .E.Debit}}{{end}}">
-      </div>
-      <div class="col-md-6">
         <label class="form-label">Kredit (Rp) — uang masuk</label>
         <input type="text" class="form-control money-input" name="kredit" value="{{if .E.Kredit}}{{fmtMoneyNoRp .E.Kredit}}{{end}}">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Debit (Rp) — uang keluar</label>
+        <input type="text" class="form-control money-input" name="debit" value="{{if .E.Debit}}{{fmtMoneyNoRp .E.Debit}}{{end}}">
       </div>
     </div>
   </div>

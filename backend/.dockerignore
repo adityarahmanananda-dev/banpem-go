@@ -1,5 +1,7 @@
 backups/
 *.db
+bin/
+*.exe
 .git
 Dockerfile
 .dockerignore
