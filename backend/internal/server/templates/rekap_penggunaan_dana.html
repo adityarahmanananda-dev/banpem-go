@@ -55,7 +55,7 @@
           <th colspan="2" class="text-center align-middle">Kuitansi</th>
           <th rowspan="2" class="text-center align-middle">Keperluan Pembayaran</th>
           <th colspan="{{.NumCols}}" class="text-center align-middle">Nilai Nominal (Rp)</th>
-          {{if .SelPajak}}<th colspan="4" class="text-center align-middle">Pajak Yang Dipungut dan Disetorkan (Rp)</th>{{end}}
+          {{if .SelPajak}}<th colspan="5" class="text-center align-middle">Pajak Yang Dipungut dan Disetorkan (Rp)</th>{{end}}
         </tr>
         <tr>
           <th class="text-center align-middle" style="width:150px">No. Bukti Dokumen</th>
@@ -66,6 +66,7 @@
           <th class="text-center align-middle">PPh 21</th>
           <th class="text-center align-middle">PPh 22</th>
           <th class="text-center align-middle">PPh 23</th>
+          <th class="text-center align-middle">PPh 4 Ayat 2</th>
           {{end}}
         </tr>
         {{else}}
@@ -74,7 +75,7 @@
           <th colspan="2" class="text-center align-middle">Kuitansi</th>
           <th rowspan="2" class="text-center align-middle">Keperluan Pembayaran</th>
           <th rowspan="2" class="text-center align-middle" style="width:180px">Nominal (Rp.)</th>
-          {{if .SelPajak}}<th colspan="4" class="text-center align-middle">Pajak Yang Dipungut dan Disetorkan (Rp)</th>{{end}}
+          {{if .SelPajak}}<th colspan="5" class="text-center align-middle">Pajak Yang Dipungut dan Disetorkan (Rp)</th>{{end}}
         </tr>
         <tr>
           <th class="text-center align-middle" style="width:150px">No. Bukti Dokumen</th>
@@ -84,6 +85,7 @@
           <th class="text-center align-middle">PPh 21</th>
           <th class="text-center align-middle">PPh 22</th>
           <th class="text-center align-middle">PPh 23</th>
+          <th class="text-center align-middle">PPh 4 Ayat 2</th>
           {{end}}
         </tr>
         {{end}}
@@ -105,6 +107,7 @@
           <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp $inv.PPh21}}</span></div></td>
           <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp $inv.PPh22}}</span></div></td>
           <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp $inv.PPh23}}</span></div></td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp $inv.PPh42}}</span></div></td>
           {{end}}
         </tr>
         {{else}}
@@ -124,6 +127,7 @@
           <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .TotalPPh21}}</span></div></td>
           <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .TotalPPh22}}</span></div></td>
           <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .TotalPPh23}}</span></div></td>
+          <td class="text-end"><div class="d-flex justify-content-between"><span>Rp.</span><span>{{fmtMoneyNoRp .TotalPPh42}}</span></div></td>
           {{end}}
         </tr>
       </tfoot>

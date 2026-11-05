@@ -36,6 +36,7 @@ type Invoice struct {
 	FlagPpn              int
 	FlagPph              int
 	KategoriNarasumber   *int
+	TarifPPH             float64
 	DPP                  int64
 	DPPNilaiLain         int64
 	NilaiPPN             int64

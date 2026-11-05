@@ -185,6 +185,7 @@ type rekapPenggunaanViewRow struct {
 	PPh21   int64
 	PPh22   int64
 	PPh23   int64
+	PPh42   int64
 }
 
 func (s *Server) handleRekapPenggunaanDana(w http.ResponseWriter, r *http.Request) {
@@ -208,11 +209,11 @@ func (s *Server) handleRekapPenggunaanDana(w http.ResponseWriter, r *http.Reques
 
 	rows := make([]rekapPenggunaanViewRow, 0, len(data.Rows))
 	distTotals := make([]int64, len(dist))
-	var tBruto, tPPN, tPPh21, tPPh22, tPPh23 int64
+	var tBruto, tPPN, tPPh21, tPPh22, tPPh23, tPPh42 int64
 	for _, rw := range data.Rows {
 		vr := rekapPenggunaanViewRow{
 			Tanggal: rw.Tanggal, Bukti: rw.NomorBukti, Uraian: rw.Uraian, Bruto: rw.Bruto,
-			PPN: rw.NilaiPPN, PPh21: rw.PPh21, PPh22: rw.PPh22, PPh23: rw.PPh23,
+			PPN: rw.NilaiPPN, PPh21: rw.PPh21, PPh22: rw.PPh22, PPh23: rw.PPh23, PPh42: rw.PPh42,
 		}
 		vr.Dist = make([]int64, len(dist))
 		for j, c := range dist {
@@ -225,6 +226,7 @@ func (s *Server) handleRekapPenggunaanDana(w http.ResponseWriter, r *http.Reques
 		tPPh21 += rw.PPh21
 		tPPh22 += rw.PPh22
 		tPPh23 += rw.PPh23
+		tPPh42 += rw.PPh42
 	}
 	distNames := make([]string, len(dist))
 	for i, c := range dist {
@@ -236,7 +238,7 @@ func (s *Server) handleRekapPenggunaanDana(w http.ResponseWriter, r *http.Reques
 	}
 	colCount := 4 + numCount
 	if opts.Pajak {
-		colCount += 4
+		colCount += 5
 	}
 	ft, fm := s.getFlash(w, r)
 	view := struct {
@@ -251,6 +253,7 @@ func (s *Server) handleRekapPenggunaanDana(w http.ResponseWriter, r *http.Reques
 		TotalPPh21   int64
 		TotalPPh22   int64
 		TotalPPh23   int64
+		TotalPPh42   int64
 		SelKegiatan  bool
 		SelSubKeg    bool
 		SelAktivitas bool
@@ -264,7 +267,7 @@ func (s *Server) handleRekapPenggunaanDana(w http.ResponseWriter, r *http.Reques
 			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
 		Rows: rows, DistCols: distNames, DistTotals: distTotals, HasDist: len(dist) > 0,
 		HeaderRows: headerRows,
-		Total:      tBruto, TotalPPN: tPPN, TotalPPh21: tPPh21, TotalPPh22: tPPh22, TotalPPh23: tPPh23,
+		Total:      tBruto, TotalPPN: tPPN, TotalPPh21: tPPh21, TotalPPh22: tPPh22, TotalPPh23: tPPh23, TotalPPh42: tPPh42,
 		SelKegiatan: opts.Kegiatan, SelSubKeg: opts.SubKeg, SelAktivitas: opts.Aktivitas,
 		SelKomponen: opts.Komponen, SelPajak: opts.Pajak,
 		NumCols: numCount, MergeCols: 4, ColCount: colCount,

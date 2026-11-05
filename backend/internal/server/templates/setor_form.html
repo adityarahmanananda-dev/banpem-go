@@ -10,7 +10,7 @@
       <div class="col-md-3">
         <label class="form-label">Jenis Pajak</label>
         <select class="form-select" name="jenis_pajak" id="jenisPajak">
-          {{range splitp "PPN|PPh 21|PPh 22|PPh 23" "|"}}
+          {{range splitp "PPN|PPh 21|PPh 22|PPh 23|PPh 4 Ayat 2" "|"}}
           <option value="{{.}}" {{if eq $.Jenis .}}selected{{end}}>{{.}}</option>
           {{end}}
         </select>

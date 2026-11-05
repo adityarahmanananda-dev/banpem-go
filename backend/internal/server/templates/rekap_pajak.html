@@ -35,7 +35,7 @@
         <tr>
           <th>No</th><th>Tanggal</th><th>NTB</th><th>NTPN</th><th>Uraian</th>
           <th class="text-end">Nominal (Rp)</th><th class="text-end">DPP</th><th class="text-end">PPN</th><th class="text-end">PPh 21</th>
-          <th class="text-end">PPh 22</th><th class="text-end">PPh 23</th><th class="text-end">Penyetoran</th>
+          <th class="text-end">PPh 22</th><th class="text-end">PPh 23</th><th class="text-end">PPh 4 Ayat 2</th><th class="text-end">Penyetoran</th>
           <th class="text-center urutan-col d-none" style="width:70px">Urut</th>
         </tr>
       </thead>
@@ -53,6 +53,7 @@
           <td class="text-end">{{fmtMoney $r.PPh21}}</td>
           <td class="text-end">{{fmtMoney $r.PPh22}}</td>
           <td class="text-end">{{fmtMoney $r.PPh23}}</td>
+          <td class="text-end">{{fmtMoney $r.PPh42}}</td>
           <td class="text-end">{{fmtMoney $r.Total}}</td>
           <td class="text-center urutan-col d-none">
             <div class="btn-group btn-group-sm">
@@ -62,7 +63,7 @@
           </td>
         </tr>
         {{else}}
-        <tr><td colspan="13" class="text-center text-muted">Belum ada tagihan.</td></tr>
+        <tr><td colspan="14" class="text-center text-muted">Belum ada tagihan.</td></tr>
         {{end}}
       </tbody>
     </table>

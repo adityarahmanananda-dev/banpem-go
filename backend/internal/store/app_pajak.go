@@ -25,6 +25,10 @@ func TaxValueForJenis(inv Invoice, jenis string) int64 {
 		if inv.JenisPPH != nil && strings.Contains(*inv.JenisPPH, "23") {
 			return inv.NilaiPPH
 		}
+	case "PPh 4 Ayat 2":
+		if inv.JenisPPH != nil && (strings.Contains(*inv.JenisPPH, "4 Ayat 2") || strings.Contains(*inv.JenisPPH, "4(2)")) {
+			return inv.NilaiPPH
+		}
 	}
 	return 0
 }
@@ -49,6 +53,8 @@ func InferJenisPajak(uraian string) string {
 	switch {
 	case strings.Contains(u, "PPN"):
 		return "PPN"
+	case strings.Contains(u, "4 AYAT 2") || strings.Contains(u, "4(2)"):
+		return "PPh 4 Ayat 2"
 	case strings.Contains(u, "21"):
 		return "PPh 21"
 	case strings.Contains(u, "22"):

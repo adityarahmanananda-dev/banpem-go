@@ -132,6 +132,7 @@ func parseInvoiceForm(r *http.Request) (store.InvoiceInput, error) {
 		JenisMenu:            int(formInt(r, "jenis_menu")),
 		FlagPpn:              int(formInt(r, "flag_ppn")),
 		FlagPph:              int(formInt(r, "flag_pph")),
+		TarifPPH:             formFloat(r, "tarif_pph"),
 		NamaRekening:         formStr(r, "nama_rekening"),
 		NomorRekening:        formStr(r, "nomor_rekening"),
 		Bank:                 formStr(r, "bank"),
@@ -217,6 +218,11 @@ func (s *Server) handleTagihanPost(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, "/bantuan/"+i64s(id)+"/tagihan/tambah")
 		return
 	}
+	if (in.FlagPph == 4 || in.FlagPph == 5) && in.TarifPPH <= 0 {
+		s.setFlash(w, "danger", "Tarif PPh wajib diisi lebih dari 0.")
+		s.redirect(w, r, "/bantuan/"+i64s(id)+"/tagihan/tambah")
+		return
+	}
 	if _, err := s.Store.CreateInvoice(r.Context(), id, in); err != nil {
 		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/tagihan/tambah")
 		return
@@ -253,6 +259,11 @@ func (s *Server) handleTagihanEditPost(w http.ResponseWriter, r *http.Request) {
 	in, err := parseInvoiceForm(r)
 	if err != nil {
 		s.setFlash(w, "danger", "Nominal bruto tidak valid.")
+		s.redirect(w, r, "/bantuan/"+i64s(id)+"/tagihan/edit/"+i64s(iid))
+		return
+	}
+	if (in.FlagPph == 4 || in.FlagPph == 5) && in.TarifPPH <= 0 {
+		s.setFlash(w, "danger", "Tarif PPh wajib diisi lebih dari 0.")
 		s.redirect(w, r, "/bantuan/"+i64s(id)+"/tagihan/edit/"+i64s(iid))
 		return
 	}
@@ -379,6 +390,7 @@ func (s *Server) handleAPIHitungPajak(w http.ResponseWriter, r *http.Request) {
 	jm := atoi0(r.URL.Query().Get("jenis_menu"))
 	fp := atoi0(r.URL.Query().Get("flag_ppn"))
 	fh := atoi0(r.URL.Query().Get("flag_pph"))
+	tp := parseFloatStr(r.URL.Query().Get("tarif_pph"))
 	if jm == 0 {
 		jm = 1
 	}
@@ -393,7 +405,7 @@ func (s *Server) handleAPIHitungPajak(w http.ResponseWriter, r *http.Request) {
 		ki := atoi0(k)
 		kategori = &ki
 	}
-	res := tax.Hitung(bruto, jm, fp, fh, kategori)
+	res := tax.Hitung(bruto, jm, fp, fh, kategori, tp)
 	id, err := pathID(r, "id")
 	var admin int64
 	if err == nil {

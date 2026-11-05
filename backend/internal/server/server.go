@@ -194,6 +194,19 @@ func formInt(r *http.Request, name string) int64 {
 	return v
 }
 
+// formFloat membaca angka desimal dari form (mendukung koma desimal & '%').
+func formFloat(r *http.Request, name string) float64 {
+	return parseFloatStr(r.FormValue(name))
+}
+
+// parseFloatStr membaca angka desimal (mendukung koma desimal & '%').
+func parseFloatStr(raw string) float64 {
+	s := strings.TrimSpace(strings.ReplaceAll(raw, ",", "."))
+	s = strings.TrimSuffix(s, "%")
+	v, _ := strconv.ParseFloat(s, 64)
+	return v
+}
+
 func formBool(r *http.Request, name string) bool {
 	v := strings.ToLower(strings.TrimSpace(r.FormValue(name)))
 	return v == "1" || v == "ya" || v == "true" || v == "on"

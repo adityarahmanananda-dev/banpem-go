@@ -34,7 +34,7 @@ func TestVectors(t *testing.T) {
 		if c.hasKat {
 			kp = k(c.kat)
 		}
-		got := Hitung(c.bruto, c.menu, c.flagPPN, c.flagPPH, kp)
+		got := Hitung(c.bruto, c.menu, c.flagPPN, c.flagPPH, kp, 0)
 		if got.DPP != c.dpp || got.DPPNilaiLain != c.dppnl || got.PPN != c.ppn ||
 			got.PPH != c.pph || got.Netto != c.netto || !strPtrEq(got.JenisPPH, c.jenis) {
 			t.Errorf("vector %d: got dpp=%d dppnl=%d ppn=%d pph=%d netto=%d jenis=%v, want dpp=%d dppnl=%d ppn=%d pph=%d netto=%d jenis=%s",
@@ -47,8 +47,21 @@ func TestVectors(t *testing.T) {
 }
 
 func TestVectorDisplay(t *testing.T) {
-	got := Hitung(100000000, 1, 1, 2, nil)
+	got := Hitung(100000000, 1, 1, 2, nil, 0)
 	if money.FormatIDR(got.Netto) != "Rp 882.882,88" {
 		t.Errorf("netto display = %s", money.FormatIDR(got.Netto))
+	}
+}
+
+func TestTarifPPhManual(t *testing.T) {
+	// DPP = bruto (menu 1 tanpa PPN): 2,5% dari 100.000.000 = 2.500.000.
+	got := Hitung(100000000, 1, 2, 4, nil, 2.5)
+	if got.PPH != 2500000 || !strPtrEq(got.JenisPPH, "PPh 21") {
+		t.Errorf("PPh 21 manual: pph=%d jenis=%v", got.PPH, got.JenisPPH)
+	}
+	// PPh 4 Ayat 2 10%: 10.000.000.
+	got = Hitung(100000000, 1, 2, 5, nil, 10)
+	if got.PPH != 10000000 || !strPtrEq(got.JenisPPH, "PPh 4 Ayat 2") {
+		t.Errorf("PPh 4 Ayat 2 manual: pph=%d jenis=%v", got.PPH, got.JenisPPH)
 	}
 }

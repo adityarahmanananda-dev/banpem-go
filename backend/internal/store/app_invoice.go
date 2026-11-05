@@ -66,6 +66,7 @@ type InvoiceInput struct {
 	FlagPpn              int
 	FlagPph              int
 	KategoriNarasumber   *int
+	TarifPPH             float64
 	NamaRekening         string
 	NomorRekening        string
 	Bank                 string
@@ -108,12 +109,12 @@ func getBantuanQ(ctx context.Context, q Querier, id int64) (Bantuan, error) {
 func getInvoiceQ(ctx context.Context, q Querier, id int64) (Invoice, error) {
 	var i Invoice
 	err := q.QueryRow(ctx, `SELECT id, bantuan_id, tanggal, nomor_bukti, uraian, bruto,
-		jenis_menu, flag_ppn, flag_pph, kategori_narasumber, dpp, dpp_nilai_lain,
+		jenis_menu, flag_ppn, flag_pph, kategori_narasumber, tarif_pph, dpp, dpp_nilai_lain,
 		nilai_ppn, nilai_pph, jenis_pph, nilai_netto, nama_rekening, nomor_rekening,
 		bank, npwp, nomor_bupot_ppn, nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order
 		FROM trx_invoice WHERE id=$1`, id).Scan(
 		&i.ID, &i.BantuanID, &i.Tanggal, &i.NomorBukti, &i.Uraian, &i.Bruto,
-		&i.JenisMenu, &i.FlagPpn, &i.FlagPph, &i.KategoriNarasumber, &i.DPP, &i.DPPNilaiLain,
+		&i.JenisMenu, &i.FlagPpn, &i.FlagPph, &i.KategoriNarasumber, &i.TarifPPH, &i.DPP, &i.DPPNilaiLain,
 		&i.NilaiPPN, &i.NilaiPPH, &i.JenisPPH, &i.NilaiNetto, &i.NamaRekening, &i.NomorRekening,
 		&i.Bank, &i.NPWP, &i.NomorBupotPPN, &i.NomorBupotPPH, &i.BiayaAdminDibebankan,
 		&i.JenisBiayaAdmin, &i.SortOrder)
@@ -156,7 +157,7 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 		if err != nil {
 			return err
 		}
-		res := tax.Hitung(in.Bruto, in.JenisMenu, in.FlagPpn, in.FlagPph, in.KategoriNarasumber)
+		res := tax.Hitung(in.Bruto, in.JenisMenu, in.FlagPpn, in.FlagPph, in.KategoriNarasumber, in.TarifPPH)
 		ppn, pph := hitungPajakEfektif(in, res)
 		jenisAdmin := NormalizeJenisBiayaAdmin(in.JenisBiayaAdmin)
 		admin := AdminFee(b.Bank, in.Bank, jenisAdmin)
@@ -179,14 +180,14 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 			(bantuan_id, tanggal, nomor_bukti, uraian, bruto, jenis_menu, flag_ppn, flag_pph,
 			 kategori_narasumber, dpp, dpp_nilai_lain, nilai_ppn, nilai_pph, jenis_pph,
 			 nilai_netto, nama_rekening, nomor_rekening, bank, npwp, nomor_bupot_ppn,
-			 nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+			 nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order, tarif_pph)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
 			RETURNING id`,
 			bantuanID, in.Tanggal, in.NomorBukti, in.Uraian, in.Bruto, in.JenisMenu,
 			in.FlagPpn, in.FlagPph, in.KategoriNarasumber, res.DPP, res.DPPNilaiLain,
 			ppn, pph, jenisPPH, nettoFinal, in.NamaRekening, in.NomorRekening,
 			in.Bank, in.NPWP, in.NomorBupotPPN, in.NomorBupotPPH, in.BiayaAdminDibebankan,
-			jenisAdmin, sortOrder).Scan(&iid)
+			jenisAdmin, sortOrder, in.TarifPPH).Scan(&iid)
 		if err != nil {
 			return err
 		}
@@ -277,7 +278,7 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 			return err
 		}
 
-		res := tax.Hitung(in.Bruto, in.JenisMenu, in.FlagPpn, in.FlagPph, in.KategoriNarasumber)
+		res := tax.Hitung(in.Bruto, in.JenisMenu, in.FlagPpn, in.FlagPph, in.KategoriNarasumber, in.TarifPPH)
 		ppn, pph := hitungPajakEfektif(in, res)
 		jenisAdmin := NormalizeJenisBiayaAdmin(in.JenisBiayaAdmin)
 		admin := AdminFee(b.Bank, in.Bank, jenisAdmin)
@@ -291,13 +292,13 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 			flag_pph=$7, kategori_narasumber=$8, dpp=$9, dpp_nilai_lain=$10, nilai_ppn=$11,
 			nilai_pph=$12, jenis_pph=$13, nilai_netto=$14, nama_rekening=$15, nomor_rekening=$16,
 			bank=$17, npwp=$18, nomor_bupot_ppn=$19, nomor_bupot_pph=$20, biaya_admin_dibebankan=$21,
-			jenis_biaya_admin=$22
-			WHERE id=$23`,
+			jenis_biaya_admin=$22, tarif_pph=$23
+			WHERE id=$24`,
 			in.Tanggal, in.NomorBukti, in.Uraian, in.Bruto, in.JenisMenu, in.FlagPpn,
 			in.FlagPph, in.KategoriNarasumber, res.DPP, res.DPPNilaiLain, ppn,
 			pph, jenisPPH, nettoFinal, in.NamaRekening, in.NomorRekening,
 			in.Bank, in.NPWP, in.NomorBupotPPN, in.NomorBupotPPH, in.BiayaAdminDibebankan,
-			jenisAdmin, iid); err != nil {
+			jenisAdmin, in.TarifPPH, iid); err != nil {
 			return err
 		}
 		if err := saveRealisasi(ctx, tx, iid, in.Realisasi, ppn, pph); err != nil {
@@ -401,7 +402,7 @@ func (s *Store) ListInvoices(ctx context.Context, bantuanID int64, order string)
 		sqlOrder = "ORDER BY sort_order, id"
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT id, bantuan_id, tanggal, nomor_bukti, uraian, bruto,
-		jenis_menu, flag_ppn, flag_pph, kategori_narasumber, dpp, dpp_nilai_lain,
+		jenis_menu, flag_ppn, flag_pph, kategori_narasumber, tarif_pph, dpp, dpp_nilai_lain,
 		nilai_ppn, nilai_pph, jenis_pph, nilai_netto, nama_rekening, nomor_rekening,
 		bank, npwp, nomor_bupot_ppn, nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order
 		FROM trx_invoice WHERE bantuan_id=$1 `+sqlOrder, bantuanID)
@@ -413,7 +414,7 @@ func (s *Store) ListInvoices(ctx context.Context, bantuanID int64, order string)
 	for rows.Next() {
 		var i Invoice
 		if err := rows.Scan(&i.ID, &i.BantuanID, &i.Tanggal, &i.NomorBukti, &i.Uraian, &i.Bruto,
-			&i.JenisMenu, &i.FlagPpn, &i.FlagPph, &i.KategoriNarasumber, &i.DPP, &i.DPPNilaiLain,
+			&i.JenisMenu, &i.FlagPpn, &i.FlagPph, &i.KategoriNarasumber, &i.TarifPPH, &i.DPP, &i.DPPNilaiLain,
 			&i.NilaiPPN, &i.NilaiPPH, &i.JenisPPH, &i.NilaiNetto, &i.NamaRekening, &i.NomorRekening,
 			&i.Bank, &i.NPWP, &i.NomorBupotPPN, &i.NomorBupotPPH, &i.BiayaAdminDibebankan,
 			&i.JenisBiayaAdmin, &i.SortOrder); err != nil {
@@ -522,6 +523,7 @@ type RekapPenggunaanRow struct {
 	PPh21      int64
 	PPh22      int64
 	PPh23      int64
+	PPh42      int64
 	Values     map[string]int64
 }
 
@@ -624,7 +626,7 @@ func (s *Store) ListRekapPenggunaan(ctx context.Context, bantuanID int64) (Rekap
 	return out, nil
 }
 
-// setPPhValues menempatkan nilai PPh ke PPh 21/22/23 sesuai jenis_pph.
+// setPPhValues menempatkan nilai PPh ke PPh 21/22/23/4(2) sesuai jenis_pph.
 func setPPhValues(r *RekapPenggunaanRow, jenis string, val int64) {
 	if strings.Contains(jenis, "21") {
 		r.PPh21 = val
@@ -634,6 +636,9 @@ func setPPhValues(r *RekapPenggunaanRow, jenis string, val int64) {
 	}
 	if strings.Contains(jenis, "23") {
 		r.PPh23 = val
+	}
+	if strings.Contains(jenis, "4 Ayat 2") || strings.Contains(jenis, "4(2)") {
+		r.PPh42 = val
 	}
 }
 

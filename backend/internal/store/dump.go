@@ -26,7 +26,7 @@ var dumpTables = []struct {
 	{"aktivitas", []dumpCol{{"id", "bigint"}, {"sub_kegiatan_id", "bigint"}, {"nama", "text"}, {"created_at", "timestamptz"}}},
 	{"komponen", []dumpCol{{"id", "bigint"}, {"sub_kegiatan_id", "bigint"}, {"aktivitas_id", "bigint"}, {"nama", "text"}, {"pagu", "bigint"}, {"created_at", "timestamptz"}}},
 	{"pencairan_hibah", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"tahap", "int"}, {"tanggal", "date"}, {"nominal", "bigint"}, {"keterangan", "text"}, {"created_at", "timestamptz"}}},
-	{"trx_invoice", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"tanggal", "date"}, {"nomor_bukti", "text"}, {"uraian", "text"}, {"bruto", "bigint"}, {"jenis_menu", "int"}, {"flag_ppn", "int"}, {"flag_pph", "int"}, {"kategori_narasumber", "int"}, {"dpp", "bigint"}, {"dpp_nilai_lain", "bigint"}, {"nilai_ppn", "bigint"}, {"nilai_pph", "bigint"}, {"jenis_pph", "text"}, {"nilai_netto", "bigint"}, {"nama_rekening", "text"}, {"nomor_rekening", "text"}, {"bank", "text"}, {"npwp", "text"}, {"nomor_bupot_ppn", "text"}, {"nomor_bupot_pph", "text"}, {"biaya_admin_dibebankan", "text"}, {"jenis_biaya_admin", "text"}, {"sort_order", "int"}}},
+	{"trx_invoice", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"tanggal", "date"}, {"nomor_bukti", "text"}, {"uraian", "text"}, {"bruto", "bigint"}, {"jenis_menu", "int"}, {"flag_ppn", "int"}, {"flag_pph", "int"}, {"kategori_narasumber", "int"}, {"dpp", "bigint"}, {"dpp_nilai_lain", "bigint"}, {"nilai_ppn", "bigint"}, {"nilai_pph", "bigint"}, {"jenis_pph", "text"}, {"nilai_netto", "bigint"}, {"nama_rekening", "text"}, {"nomor_rekening", "text"}, {"bank", "text"}, {"npwp", "text"}, {"nomor_bupot_ppn", "text"}, {"nomor_bupot_pph", "text"}, {"biaya_admin_dibebankan", "text"}, {"jenis_biaya_admin", "text"}, {"sort_order", "int"}, {"tarif_pph", "double precision"}}},
 	{"trx_invoice_realisasi", []dumpCol{{"id", "bigint"}, {"invoice_id", "bigint"}, {"komponen_id", "bigint"}, {"bruto", "bigint"}, {"nilai_ppn", "bigint"}, {"nilai_pph", "bigint"}, {"nilai_netto", "bigint"}}},
 	{"jasa_giro", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"tanggal", "date"}, {"nominal", "bigint"}, {"uraian", "text"}}},
 	{"trx_ledger", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"nomor", "int"}, {"tanggal", "date"}, {"nomor_bukti", "text"}, {"uraian", "text"}, {"debit", "bigint"}, {"kredit", "bigint"}, {"saldo", "bigint"}, {"invoice_id", "bigint"}, {"jenis_transaksi", "text"}, {"nomor_bupot", "text"}}},
@@ -42,6 +42,8 @@ func sqlValue(v any, typ string) string {
 	case "text":
 		return "'" + strings.ReplaceAll(fmt.Sprint(v), "'", "''") + "'"
 	case "int", "bigint":
+		return fmt.Sprint(v)
+	case "double precision", "numeric":
 		return fmt.Sprint(v)
 	case "date":
 		if t, ok := v.(time.Time); ok {

@@ -2,7 +2,11 @@
 // Semua perhitungan memakai integer sen dan pembulatan HALF-EVEN bertahap.
 package tax
 
-import "ebku/internal/money"
+import (
+	"math"
+
+	"ebku/internal/money"
+)
 
 // Result adalah keluaran hitung_pajak. Semua nilai dalam sen.
 type Result struct {
@@ -16,9 +20,10 @@ type Result struct {
 
 func sp(s string) *string { return &s }
 
-// Hitung menerima bruto (sen), jenisMenu 1-5, flagPpn 1/2, flagPph 1/2/3,
-// kategori *int (1-4) dan mengembalikan hasil persis sesuai spesifikasi.
-func Hitung(bruto int64, jenisMenu, flagPpn, flagPph int, kategori *int) Result {
+// Hitung menerima bruto (sen), jenisMenu 1-5, flagPpn 1/2, flagPph 1/2/3/4/5,
+// kategori *int (1-4), tarifPph (persen, untuk flagPph 4/5) dan mengembalikan
+// hasil persis sesuai spesifikasi.
+func Hitung(bruto int64, jenisMenu, flagPpn, flagPph int, kategori *int, tarifPph float64) Result {
 	var r Result
 	switch jenisMenu {
 	case 1:
@@ -36,6 +41,14 @@ func Hitung(bruto int64, jenisMenu, flagPpn, flagPph int, kategori *int) Result 
 		case 2:
 			r.PPH = money.Pct(r.DPP, 2)
 			r.JenisPPH = sp("PPh 23")
+		case 4:
+			// PPh 21 dengan tarif manual (persen).
+			r.PPH = money.MulDiv(r.DPP, int64(math.Round(tarifPph*100)), 10000)
+			r.JenisPPH = sp("PPh 21")
+		case 5:
+			// PPh Pasal 4 Ayat 2 dengan tarif manual (persen).
+			r.PPH = money.MulDiv(r.DPP, int64(math.Round(tarifPph*100)), 10000)
+			r.JenisPPH = sp("PPh 4 Ayat 2")
 		}
 	case 2:
 		if kategori != nil {

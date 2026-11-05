@@ -86,7 +86,16 @@
               <option value="3" {{if or (not .Inv) (eq .Inv.FlagPph 3)}}selected{{end}}>Tidak ada PPh</option>
               <option value="1" {{if .Inv}}{{if eq .Inv.FlagPph 1}}selected{{end}}{{end}}>PPh 22</option>
               <option value="2" {{if .Inv}}{{if eq .Inv.FlagPph 2}}selected{{end}}{{end}}>PPh 23</option>
+              <option value="4" {{if .Inv}}{{if eq .Inv.FlagPph 4}}selected{{end}}{{end}}>PPh 21 (tarif manual)</option>
+              <option value="5" {{if .Inv}}{{if eq .Inv.FlagPph 5}}selected{{end}}{{end}}>PPh Pasal 4 Ayat 2 (tarif manual)</option>
             </select>
+          </div>
+          <div class="col-md-4" id="tarifPphWrap" style="display:none">
+            <label class="form-label">Tarif PPh (%)</label>
+            <input type="text" inputmode="decimal" class="form-control" name="tarif_pph" id="tarifPph"
+                   value="{{if .Inv}}{{if .Inv.TarifPPH}}{{printf "%g" .Inv.TarifPPH}}{{end}}{{end}}"
+                   placeholder="Contoh: 2.5">
+            <small class="text-muted">Nilai PPh dihitung otomatis dari DPP × tarif.</small>
           </div>
           <div class="col-md-2" id="bupotPPN">
             <label class="form-label">No. Bupot PPN</label>

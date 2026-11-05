@@ -223,6 +223,8 @@
     });
     var jenisAdmin = document.getElementById("jenisBiayaAdmin");
     if (jenisAdmin) params.set("jenis_biaya_admin", jenisAdmin.value);
+    var tarif = document.getElementById("tarifPph");
+    if (tarif) params.set("tarif_pph", tarif.value || "0");
     var kat = document.querySelector('select[name="kategori_narasumber"]');
     if (kat && kat.value) params.set("kategori_narasumber", kat.value);
     fetch("/api/bantuan/" + window.BANTUAN_ID + "/hitung-pajak?" + params.toString())
@@ -253,7 +255,7 @@
   var brutoEl = document.getElementById("bruto");
   if (brutoEl && window.BANTUAN_ID) {
     var pajakTriggers = [
-      "jenisMenu", "bruto", "bank", "jenisBiayaAdmin"
+      "jenisMenu", "bruto", "bank", "jenisBiayaAdmin", "tarifPph"
     ].map(function (id) { return document.getElementById(id); }).filter(Boolean);
     pajakTriggers.push.apply(pajakTriggers, document.querySelectorAll(".flag-ppn, .flag-pph, select[name=kategori_narasumber]"));
     pajakTriggers.forEach(function (el) {
@@ -305,8 +307,13 @@
     var flagPPH = document.querySelector(".flag-pph");
     var bPPN = document.getElementById("bupotPPN");
     var bPPH = document.getElementById("bupotPPH");
+    var tarifWrap = document.getElementById("tarifPphWrap");
+    var tarifInput = document.getElementById("tarifPph");
     if (flagPPN && bPPN) bPPN.style.display = Number(flagPPN.value) === 1 ? "" : "none";
     if (flagPPH && bPPH) bPPH.style.display = Number(flagPPH.value) === 3 ? "none" : "";
+    var perluTarif = flagPPH && (Number(flagPPH.value) === 4 || Number(flagPPH.value) === 5);
+    if (tarifWrap) tarifWrap.style.display = perluTarif ? "" : "none";
+    if (tarifInput) tarifInput.required = !!perluTarif;
   }
   var flagPPNEl = document.querySelector(".flag-ppn");
   var flagPPHEl = document.querySelector(".flag-pph");

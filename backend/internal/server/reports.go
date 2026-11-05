@@ -188,6 +188,7 @@ type rekapRow struct {
 	PPh21   int64
 	PPh22   int64
 	PPh23   int64
+	PPh42   int64
 	Total   int64
 	NTB     string
 	NTPN    string
@@ -243,6 +244,8 @@ func (s *Server) buildRekapRows(ctx context.Context, bantuanID int64) ([]rekapRo
 		}
 		if inv.JenisPPH != nil {
 			switch {
+			case strings.Contains(*inv.JenisPPH, "4 Ayat 2") || strings.Contains(*inv.JenisPPH, "4(2)"):
+				r.PPh42 = inv.NilaiPPH
 			case strings.Contains(*inv.JenisPPH, "21"):
 				r.PPh21 = inv.NilaiPPH
 			case strings.Contains(*inv.JenisPPH, "22"):
@@ -296,6 +299,7 @@ func (s *Server) buildRekapPajak(ctx context.Context, b *store.Bantuan, tglCetak
 		{Header: "PPh 21", Width: 22, ExWidth: 16, Num: true},
 		{Header: "PPh 22", Width: 22, ExWidth: 16, Num: true},
 		{Header: "PPh 23", Width: 22, ExWidth: 16, Num: true},
+		{Header: "PPh 4 Ayat 2", Width: 24, ExWidth: 18, Num: true},
 		{Header: "Penyetoran", Width: 26, ExWidth: 18, Num: true},
 	}
 	rep := export.Report{
@@ -306,11 +310,11 @@ func (s *Server) buildRekapPajak(ctx context.Context, b *store.Bantuan, tglCetak
 		Landscape:  true,
 		Sig:        sigData(b, tglCetak),
 	}
-	var tBruto, tDPP, tPPN, t21, t22, t23, tTotal int64
+	var tBruto, tDPP, tPPN, t21, t22, t23, t42, tTotal int64
 	for i, r := range rows {
 		rep.Rows = append(rep.Rows, []any{
 			i + 1, r.Tanggal.Format("02-01-2006"), r.NTB, r.NTPN, r.Uraian,
-			r.Bruto, r.DPP, r.PPN, r.PPh21, r.PPh22, r.PPh23, r.Total,
+			r.Bruto, r.DPP, r.PPN, r.PPh21, r.PPh22, r.PPh23, r.PPh42, r.Total,
 		})
 		tBruto += r.Bruto
 		tDPP += r.DPP
@@ -318,9 +322,10 @@ func (s *Server) buildRekapPajak(ctx context.Context, b *store.Bantuan, tglCetak
 		t21 += r.PPh21
 		t22 += r.PPh22
 		t23 += r.PPh23
+		t42 += r.PPh42
 		tTotal += r.Total
 	}
-	rep.TotalRow = []any{"TOTAL", "", "", "", "", tBruto, tDPP, tPPN, t21, t22, t23, tTotal}
+	rep.TotalRow = []any{"TOTAL", "", "", "", "", tBruto, tDPP, tPPN, t21, t22, t23, t42, tTotal}
 	return rep, nil
 }
 
@@ -937,16 +942,17 @@ func buildRekapHeaderRows(selCount int, tree []rekapHeaderNode, hasPajak bool) [
 		// kolom pajak
 		if hasPajak {
 			if ri == 0 {
-				row = append(row, export.HeaderCell{Text: "Pajak Yang Dipungut dan Disetorkan (Rp)", Colspan: 4, Rowspan: 1})
+				row = append(row, export.HeaderCell{Text: "Pajak Yang Dipungut dan Disetorkan (Rp)", Colspan: 5, Rowspan: 1})
 			} else if ri == 1 {
 				row = append(row,
 					export.HeaderCell{Text: "PPN", Colspan: 1, Rowspan: depth - 1},
 					export.HeaderCell{Text: "PPh 21", Colspan: 1, Rowspan: depth - 1},
 					export.HeaderCell{Text: "PPh 22", Colspan: 1, Rowspan: depth - 1},
 					export.HeaderCell{Text: "PPh 23", Colspan: 1, Rowspan: depth - 1},
+					export.HeaderCell{Text: "PPh 4 Ayat 2", Colspan: 1, Rowspan: depth - 1},
 				)
 			} else {
-				row = append(row, cont(), cont(), cont(), cont())
+				row = append(row, cont(), cont(), cont(), cont(), cont())
 			}
 		}
 		rows[ri] = row
@@ -1011,10 +1017,11 @@ func (s *Server) buildRekapPenggunaanDana(ctx context.Context, b *store.Bantuan,
 			export.Col{Header: "PPh 21", Width: 20, ExWidth: 14, MaxWidth: 20, Num: true, Money: true},
 			export.Col{Header: "PPh 22", Width: 20, ExWidth: 14, MaxWidth: 20, Num: true, Money: true},
 			export.Col{Header: "PPh 23", Width: 20, ExWidth: 14, MaxWidth: 20, Num: true, Money: true},
+			export.Col{Header: "PPh 4 Ayat 2", Width: 22, ExWidth: 16, MaxWidth: 22, Num: true, Money: true},
 		)
 		if len(headerRows) == 0 {
 			colGroups = append(colGroups, export.ColGroup{
-				Header: "PAJAK YANG DIPUNGUT DAN DISETORKAN (Rp)", Start: 4 + len(dist), Span: 4,
+				Header: "PAJAK YANG DIPUNGUT DAN DISETORKAN (Rp)", Start: 4 + len(dist), Span: 5,
 			})
 		}
 	}
@@ -1031,7 +1038,7 @@ func (s *Server) buildRekapPenggunaanDana(ctx context.Context, b *store.Bantuan,
 		rep.Landscape = true
 	}
 
-	var tPPN, tPPh21, tPPh22, tPPh23 int64
+	var tPPN, tPPh21, tPPh22, tPPh23, tPPh42 int64
 	totals := make([]int64, len(dist))
 	for i, r := range data.Rows {
 		row := []any{i + 1, r.NomorBukti, tanggalID(r.Tanggal), r.Uraian}
@@ -1045,11 +1052,12 @@ func (s *Server) buildRekapPenggunaanDana(ctx context.Context, b *store.Bantuan,
 			row = append(row, r.Bruto)
 		}
 		if opts.Pajak {
-			row = append(row, r.NilaiPPN, r.PPh21, r.PPh22, r.PPh23)
+			row = append(row, r.NilaiPPN, r.PPh21, r.PPh22, r.PPh23, r.PPh42)
 			tPPN += r.NilaiPPN
 			tPPh21 += r.PPh21
 			tPPh22 += r.PPh22
 			tPPh23 += r.PPh23
+			tPPh42 += r.PPh42
 		}
 		rep.Rows = append(rep.Rows, row)
 	}
@@ -1076,6 +1084,7 @@ func (s *Server) buildRekapPenggunaanDana(ctx context.Context, b *store.Bantuan,
 		total[taxIdx+1] = tPPh21
 		total[taxIdx+2] = tPPh22
 		total[taxIdx+3] = tPPh23
+		total[taxIdx+4] = tPPh42
 	}
 	rep.TotalRow = total
 	return rep, nil
