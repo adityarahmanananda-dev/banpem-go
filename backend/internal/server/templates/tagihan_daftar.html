@@ -12,6 +12,22 @@
   </div>
 </div>
 
+<form method="get" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label small mb-0" for="dari">Dari</label><input type="date" class="form-control form-control-sm" id="dari" name="dari" value="{{.Dari}}"></div>
+    <div class="col-auto"><label class="form-label small mb-0" for="sampai">Sampai</label><input type="date" class="form-control form-control-sm" id="sampai" name="sampai" value="{{.Sampai}}"></div>
+    <div class="col-auto"><label class="form-label small mb-0" for="per_page">Per halaman</label>
+      <select class="form-select form-select-sm" id="per_page" name="per_page">
+        <option value="10" {{if eq .Pagination.PerPage 10}}selected{{end}}>10</option>
+        <option value="25" {{if eq .Pagination.PerPage 25}}selected{{end}}>25</option>
+        <option value="50" {{if eq .Pagination.PerPage 50}}selected{{end}}>50</option>
+        <option value="100" {{if eq .Pagination.PerPage 100}}selected{{end}}>100</option>
+      </select>
+    </div>
+    <div class="col-auto"><button class="btn btn-primary btn-sm" type="submit">Filter</button> <a class="btn btn-outline-secondary btn-sm" href="?">Reset</a></div>
+  </div>
+</form>
+
 <div class="card">
   <div class="table-responsive">
     <table class="table table-sm table-bordered align-middle">
@@ -25,7 +41,7 @@
       <tbody>
         {{range $i, $inv := .Invoices}}
         <tr>
-          <td>{{inc $i}}</td>
+          <td>{{addi $.Pagination.From $i}}</td>
           <td>{{dateID $inv.Tanggal}}</td>
           <td class="text-break">{{$inv.NomorBukti}}</td>
           <td>{{$inv.Uraian}}</td>
@@ -46,4 +62,5 @@
     </table>
   </div>
 </div>
+{{template "pagination" .Pagination}}
 {{end}}

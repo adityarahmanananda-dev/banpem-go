@@ -39,12 +39,18 @@ func tanggalID(t time.Time) string {
 	return fmt.Sprintf("%d %s %d", t.Day(), bulanID[int(t.Month())], t.Year())
 }
 
-// sigData membangun blok tanda tangan dari bantuan.
-func sigData(b *store.Bantuan, tanggalCetak time.Time) export.SigData {
+// sigData membangun blok tanda tangan dari bantuan. Nama sekolah dan kota
+// diambil dari data/config, bukan hardcode satu sekolah.
+func (s *Server) sigData(b *store.Bantuan, tanggalCetak time.Time) export.SigData {
+	sekolah := sekolahNama(b)
+	city := strings.TrimSpace(s.ReportCity)
+	if city == "" {
+		city = "Jakarta"
+	}
 	return export.SigData{
-		DateText:  "Jakarta, " + tanggalID(tanggalCetak),
-		HeadLeft:  "Kepala SMK Negeri 26 Jakarta",
-		HeadRight: "Bendahara SMK Negeri 26 Jakarta",
+		DateText:  city + ", " + tanggalID(tanggalCetak),
+		HeadLeft:  "Kepala " + sekolah,
+		HeadRight: "Bendahara " + sekolah,
 		NameLeft:  b.KepalaSekolah,
 		NameRight: b.Bendahara,
 		NipLeft:   b.NIPKepalaSekolah,
@@ -112,7 +118,7 @@ func (s *Server) buildLedgerReport(ctx context.Context, b *store.Bantuan, table 
 		Subtitle:   b.Nama,
 		Cols:       cols,
 		TotalMerge: 4,
-		Sig:        sigData(b, tglCetak),
+		Sig:        s.sigData(b, tglCetak),
 	}
 	var totDebit, totKredit int64
 	running := base
@@ -308,7 +314,7 @@ func (s *Server) buildRekapPajak(ctx context.Context, b *store.Bantuan, tglCetak
 		Cols:       cols,
 		TotalMerge: 5,
 		Landscape:  true,
-		Sig:        sigData(b, tglCetak),
+		Sig:        s.sigData(b, tglCetak),
 	}
 	var tBruto, tDPP, tPPN, t21, t22, t23, t42, tTotal int64
 	for i, r := range rows {
@@ -333,12 +339,16 @@ func (s *Server) buildRekapPajak(ctx context.Context, b *store.Bantuan, tglCetak
 // hanya transaksi pada tanggal tersebut yang disertakan (untuk serah ke bank).
 // Kolom angka yang tampil mengikuti pilihan colOpts.
 func (s *Server) buildRekapBelanja(ctx context.Context, b *store.Bantuan, tglCetak time.Time, filtTanggal *time.Time, colOpts rekapBelanjaColOpts) (export.Report, error) {
+	return s.buildRekapBelanjaRange(ctx, b, tglCetak, filtTanggal, filtTanggal, colOpts)
+}
+
+func (s *Server) buildRekapBelanjaRange(ctx context.Context, b *store.Bantuan, tglCetak time.Time, from, to *time.Time, colOpts rekapBelanjaColOpts) (export.Report, error) {
 	rows, err := s.Store.ListBelanja(ctx, b.ID)
 	if err != nil {
 		return export.Report{}, err
 	}
-	if filtTanggal != nil {
-		rows = filterBelanjaTanggal(rows, *filtTanggal)
+	if from != nil || to != nil {
+		rows = filterBelanjaRange(rows, from, to)
 	}
 	cols := []export.Col{
 		{Header: "No", Width: 8, ExWidth: 6},
@@ -379,7 +389,7 @@ func (s *Server) buildRekapBelanja(ctx context.Context, b *store.Bantuan, tglCet
 		Cols:       cols,
 		TotalMerge: totalMerge,
 		Landscape:  true,
-		Sig:        sigData(b, tglCetak),
+		Sig:        s.sigData(b, tglCetak),
 	}
 	penyedia := func(r store.BelanjaRow) string {
 		return strings.Join([]string{
@@ -505,7 +515,7 @@ func (s *Server) buildRekapRealisasi(ctx context.Context, b *store.Bantuan, grou
 		Cols:       cols,
 		Landscape:  true,
 		TotalMerge: 1,
-		Sig:        sigData(b, tglCetak),
+		Sig:        s.sigData(b, tglCetak),
 	}
 	for _, r := range compact {
 		rep.Rows = append(rep.Rows, []any{
@@ -550,7 +560,7 @@ func (s *Server) buildDaftarTagihan(ctx context.Context, b *store.Bantuan, tglCe
 		Subtitle:  b.Nama,
 		Cols:      cols,
 		Landscape: true,
-		Sig:       sigData(b, tglCetak),
+		Sig:       s.sigData(b, tglCetak),
 	}
 	for i, inv := range invoices {
 		admin := store.AdminFee(b.Bank, inv.Bank, inv.JenisBiayaAdmin)
@@ -586,7 +596,7 @@ func (s *Server) buildRABReport(ctx context.Context, b *store.Bantuan, tglCetak 
 		Subtitle:   b.Nama,
 		Cols:       cols,
 		TotalMerge: 1,
-		Sig:        sigData(b, tglCetak),
+		Sig:        s.sigData(b, tglCetak),
 	}
 	addRow := func(prefix, label string, bold, noBorder bool, pagu int64) {
 		rep.Rows = append(rep.Rows, []any{prefix + label, pagu})
@@ -1032,7 +1042,7 @@ func (s *Server) buildRekapPenggunaanDana(ctx context.Context, b *store.Bantuan,
 		ColGroups:  colGroups,
 		HeaderRows: headerRows,
 		TotalMerge: 4,
-		Sig:        sigData(b, tglCetak),
+		Sig:        s.sigData(b, tglCetak),
 	}
 	if len(dist) > 0 || opts.Pajak {
 		rep.Landscape = true
@@ -1090,8 +1100,30 @@ func (s *Server) buildRekapPenggunaanDana(ctx context.Context, b *store.Bantuan,
 	return rep, nil
 }
 
-// reportFilename menghasilkan nama file export sesuai spesifikasi.
+// reportFilename menghasilkan nama file export yang aman untuk header HTTP.
 func reportFilename(kind, nama string, t time.Time) string {
-	nama = strings.ReplaceAll(nama, " ", "_")
+	nama = sanitizeFilename(nama)
+	if nama == "" {
+		nama = "Bantuan"
+	}
 	return fmt.Sprintf("%s_%s_%s", kind, nama, t.Format("20060102"))
+}
+
+func sanitizeFilename(s string) string {
+	var b strings.Builder
+	lastUnderscore := false
+	for _, r := range s {
+		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '.' || r == '-' || r == '_'
+		if ok {
+			b.WriteRune(r)
+			lastUnderscore = false
+			continue
+		}
+		if !lastUnderscore {
+			b.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+	return strings.Trim(b.String(), "._-")
 }

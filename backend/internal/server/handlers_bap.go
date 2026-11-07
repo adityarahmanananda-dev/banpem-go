@@ -44,12 +44,18 @@ func (s *Server) bapKasData(ctx context.Context, b *store.Bantuan, tgl time.Time
 
 // bapKasParams membaca tanggal & uang tunai dari query string.
 func bapKasParams(r *http.Request) (time.Time, int64, int64) {
-	tgl := store.ParseDate(r.URL.Query().Get("tanggal"))
-	if tgl.IsZero() {
+	tgl, err := store.ParseDateStrict(r.URL.Query().Get("tanggal"))
+	if err != nil {
 		tgl = time.Now()
 	}
-	uangKertas, _ := money.Parse(r.URL.Query().Get("uang_kertas"))
-	uangLogam, _ := money.Parse(r.URL.Query().Get("uang_logam"))
+	uangKertas, err := money.ParseNonNegative(r.URL.Query().Get("uang_kertas"))
+	if err != nil {
+		uangKertas = 0
+	}
+	uangLogam, err := money.ParseNonNegative(r.URL.Query().Get("uang_logam"))
+	if err != nil {
+		uangLogam = 0
+	}
 	return tgl, uangKertas, uangLogam
 }
 

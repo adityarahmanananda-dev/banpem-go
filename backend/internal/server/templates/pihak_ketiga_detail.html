@@ -1,0 +1,55 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="mb-0"><i class="bi bi-person-lines-fill"></i> {{.P.Nama}}</h4>
+    <div class="text-muted small">NPWP: {{if .P.NPWP}}{{formatNPWP .P.NPWP}}{{else}}-{{end}}</div>
+  </div>
+  <a href="/pihak-ketiga" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kembali</a>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header fw-bold">Rekening Terdaftar</div>
+  <div class="card-body">
+    {{range .P.Rekening}}
+    <form method="post" action="/pihak-ketiga/{{$.P.ID}}/rekening/{{.ID}}/edit" class="border rounded p-2 mb-2">
+      <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+      <div class="row g-2 align-items-end">
+        <div class="col-12 col-md-3"><label class="form-label small mb-0">Bank</label>
+          {{if $.CanWrite}}<input class="form-control form-control-sm" name="bank" value="{{.Bank}}">{{else}}<div class="form-control-plaintext form-control-sm">{{.Bank}}</div>{{end}}
+        </div>
+        <div class="col-12 col-md-4"><label class="form-label small mb-0">Nama Rekening</label>
+          {{if $.CanWrite}}<input class="form-control form-control-sm" name="nama_rekening" value="{{.NamaRekening}}">{{else}}<div class="form-control-plaintext form-control-sm">{{.NamaRekening}}</div>{{end}}
+        </div>
+        <div class="col-12 col-md-3"><label class="form-label small mb-0">Nomor Rekening</label>
+          {{if $.CanWrite}}<input class="form-control form-control-sm" name="nomor_rekening" value="{{.NomorRekening}}">{{else}}<div class="form-control-plaintext form-control-sm">{{.NomorRekening}}</div>{{end}}
+        </div>
+        <div class="col-12 col-md-2 d-flex gap-1">
+          {{if $.CanWrite}}
+          <button class="btn btn-outline-primary btn-sm" type="submit">Simpan</button>
+          <button class="btn btn-outline-danger btn-sm" type="submit" formaction="/pihak-ketiga/{{$.P.ID}}/rekening/{{.ID}}/hapus" onclick="return confirm('Hapus rekening ini?')">Hapus</button>
+          {{end}}
+        </div>
+      </div>
+    </form>
+    {{else}}
+    <p class="text-muted mb-0">Belum ada rekening.</p>
+    {{end}}
+  </div>
+</div>
+
+{{if .CanWrite}}
+<div class="card">
+  <div class="card-header fw-bold">Tambah Rekening</div>
+  <div class="card-body">
+    <form method="post" action="/pihak-ketiga/{{.P.ID}}/rekening/tambah" class="row g-2">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <div class="col-12 col-md-3"><label class="form-label small" for="bank">Bank</label><input class="form-control" id="bank" name="bank" placeholder="BRI / BNI / tunai"></div>
+      <div class="col-12 col-md-4"><label class="form-label small" for="nama_rekening">Nama Rekening</label><input class="form-control" id="nama_rekening" name="nama_rekening"></div>
+      <div class="col-12 col-md-3"><label class="form-label small" for="nomor_rekening">Nomor Rekening</label><input class="form-control" id="nomor_rekening" name="nomor_rekening"></div>
+      <div class="col-12 col-md-2 d-flex align-items-end"><button class="btn btn-primary w-100" type="submit"><i class="bi bi-plus-lg"></i> Tambah</button></div>
+    </form>
+    <div class="form-text mt-2">Bank kosong + nomor kosong berarti pembayaran tunai.</div>
+  </div>
+</div>
+{{end}}
+{{end}}

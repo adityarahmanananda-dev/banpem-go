@@ -25,6 +25,16 @@ func (s *Server) handleRekapPajak(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
+	from, to := dateRangeFromQuery(r)
+	if from != nil || to != nil {
+		filtered := make([]rekapRow, 0, len(rows))
+		for _, rw := range rows {
+			if dateInRange(rw.Tanggal, from, to) {
+				filtered = append(filtered, rw)
+			}
+		}
+		rows = filtered
+	}
 	setors, err := s.Store.ListSetorEntries(r.Context(), id)
 	if err != nil {
 		s.fail(w, r, err, "/")
@@ -44,6 +54,8 @@ func (s *Server) handleRekapPajak(w http.ResponseWriter, r *http.Request) {
 		TotalPemungutan int64
 		TotalPenyetoran int64
 		TotalJasaGiro   int64
+		Dari            string
+		Sampai          string
 	}{
 		baseView: baseView{Title: "Rekap Pajak", Active: "rekap-pajak", FlashType: ft, FlashMsg: fm,
 			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
@@ -51,6 +63,8 @@ func (s *Server) handleRekapPajak(w http.ResponseWriter, r *http.Request) {
 		TotalPemungutan: s.Store.TotalPemungutan(r.Context(), id),
 		TotalPenyetoran: s.Store.TotalSetorPajak(r.Context(), id),
 		TotalJasaGiro:   s.Store.TotalJasaGiro(r.Context(), id),
+		Dari:            r.URL.Query().Get("dari"),
+		Sampai:          r.URL.Query().Get("sampai"),
 	}
 	s.render(w, r, "rekap_pajak.html", data)
 }
@@ -71,15 +85,16 @@ func (s *Server) handleRekapBelanja(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
-	var filtTanggal *time.Time
-	selTanggal := r.URL.Query().Get("tanggal")
-	if selTanggal != "" {
-		if t, err := time.Parse("2006-01-02", selTanggal); err == nil {
-			filtTanggal = &t
+	from, to := dateRangeFromQuery(r)
+	if from == nil && to == nil {
+		if sel := r.URL.Query().Get("tanggal"); sel != "" {
+			if t, err := store.ParseDateStrict(sel); err == nil {
+				from, to = &t, &t
+			}
 		}
 	}
-	if filtTanggal != nil {
-		rows = filterBelanjaTanggal(rows, *filtTanggal)
+	if from != nil || to != nil {
+		rows = filterBelanjaRange(rows, from, to)
 	}
 	colOpts := rekapBelanjaColOptsFromQuery(r.URL.Query())
 	var tBruto, tPotongan, tSetelah, tAdmin, tDitransfer int64
@@ -90,6 +105,9 @@ func (s *Server) handleRekapBelanja(w http.ResponseWriter, r *http.Request) {
 		tAdmin += rw.BiayaAdmin
 		tDitransfer += rw.Netto - rw.BiayaAdmin
 	}
+	page, perPage := pageParams(r)
+	pagination := buildPagination(r, page, perPage, len(rows))
+	rows = paginateSlice(rows, pagination.Page, perPage)
 	ft, fm := s.getFlash(w, r)
 	data := struct {
 		baseView
@@ -100,7 +118,9 @@ func (s *Server) handleRekapBelanja(w http.ResponseWriter, r *http.Request) {
 		TotBiayaAdmin   int64
 		TotDitransfer   int64
 		SelTanggal      string
-		SelTanggalTime  time.Time
+		Dari            string
+		Sampai          string
+		Pagination      Pagination
 		SelKegiatan     bool
 		SelBruto        bool
 		SelPotongan     bool
@@ -114,7 +134,8 @@ func (s *Server) handleRekapBelanja(w http.ResponseWriter, r *http.Request) {
 			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
 		Rows: rows, TotBruto: tBruto, TotPotongan: tPotongan, TotSetelahPajak: tSetelah,
 		TotBiayaAdmin: tAdmin, TotDitransfer: tDitransfer,
-		SelTanggal: selTanggal, SelTanggalTime: time.Time{},
+		SelTanggal: r.URL.Query().Get("tanggal"), Dari: r.URL.Query().Get("dari"),
+		Sampai: r.URL.Query().Get("sampai"), Pagination: pagination,
 		SelKegiatan: colOpts.Kegiatan, SelBruto: colOpts.Bruto, SelPotongan: colOpts.Potongan,
 		SelSetelahPajak: colOpts.SetelahPajak,
 		SelBiayaAdmin:   colOpts.BiayaAdmin, SelDitransfer: colOpts.Ditransfer,
@@ -124,22 +145,23 @@ func (s *Server) handleRekapBelanja(w http.ResponseWriter, r *http.Request) {
 		data.MergeCols = 5
 		data.NumCols++
 	}
-	if filtTanggal != nil {
-		data.SelTanggalTime = *filtTanggal
-	}
 	s.render(w, r, "rekap_belanja.html", data)
 }
 
-// filterBelanjaTanggal menyaring baris Rekap Belanja agar hanya transaksi pada
-// tanggal yang dipilih (dipakai untuk cetak serah ke bank).
-func filterBelanjaTanggal(rows []store.BelanjaRow, t time.Time) []store.BelanjaRow {
+// filterBelanjaRange menyaring baris Rekap Belanja berdasarkan rentang tanggal.
+func filterBelanjaRange(rows []store.BelanjaRow, from, to *time.Time) []store.BelanjaRow {
 	var out []store.BelanjaRow
 	for _, r := range rows {
-		if r.Tanggal.Year() == t.Year() && r.Tanggal.YearDay() == t.YearDay() {
+		if dateInRange(r.Tanggal, from, to) {
 			out = append(out, r)
 		}
 	}
 	return out
+}
+
+// filterBelanjaTanggal dipertahankan untuk kompatibilitas pemanggil lama.
+func filterBelanjaTanggal(rows []store.BelanjaRow, t time.Time) []store.BelanjaRow {
+	return filterBelanjaRange(rows, &t, &t)
 }
 
 // handleInvoiceReorder menyimpan urutan invoice (drag-and-drop) dari halaman
@@ -166,9 +188,10 @@ func (s *Server) handleInvoiceReorder(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := s.Store.SetInvoiceOrder(r.Context(), id, ids); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "gagal menyimpan urutan", http.StatusInternalServerError)
 		return
 	}
+	s.audit(r, &id, "reorder", "invoice", nil, map[string]any{"count": len(ids)})
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }

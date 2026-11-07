@@ -2,7 +2,7 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0"><i class="bi bi-bank"></i> Buku Kas Bank</h4>
   <div class="d-flex flex-wrap gap-1">
-    <button type="button" class="btn btn-outline-secondary btn-sm atur-urutan" data-target="#ledgerTbody"><i class="bi bi-arrow-up-down"></i> Atur Urutan</button>
+    {{if .CanWrite}}<button type="button" class="btn btn-outline-secondary btn-sm atur-urutan" data-target="#ledgerTbody"><i class="bi bi-arrow-up-down"></i> Atur Urutan</button>{{end}}
     <div class="dropdown">
       <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Export</button>
       <ul class="dropdown-menu">
@@ -20,6 +20,23 @@
   <li class="nav-item"><a class="nav-link {{if eq .Versi.Versi "rencana"}}active{{end}}" href="?versi=rencana">Rencana 100%</a></li>
 </ul>
 {{end}}
+
+<form method="get" class="card card-body mb-3">
+  <input type="hidden" name="versi" value="{{.Versi.Versi}}">
+  <div class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label small mb-0" for="dari">Dari</label><input type="date" class="form-control form-control-sm" id="dari" name="dari" value="{{.Dari}}"></div>
+    <div class="col-auto"><label class="form-label small mb-0" for="sampai">Sampai</label><input type="date" class="form-control form-control-sm" id="sampai" name="sampai" value="{{.Sampai}}"></div>
+    <div class="col-auto"><label class="form-label small mb-0" for="per_page">Per halaman</label>
+      <select class="form-select form-select-sm" id="per_page" name="per_page">
+        <option value="10" {{if eq .Pagination.PerPage 10}}selected{{end}}>10</option>
+        <option value="25" {{if eq .Pagination.PerPage 25}}selected{{end}}>25</option>
+        <option value="50" {{if eq .Pagination.PerPage 50}}selected{{end}}>50</option>
+        <option value="100" {{if eq .Pagination.PerPage 100}}selected{{end}}>100</option>
+      </select>
+    </div>
+    <div class="col-auto"><button class="btn btn-primary btn-sm" type="submit">Filter</button> <a class="btn btn-outline-secondary btn-sm" href="?versi={{.Versi.Versi}}">Reset</a></div>
+  </div>
+</form>
 
 <div class="card">
   <div class="table-responsive">
@@ -59,9 +76,9 @@
             {{end}}
           </td>
           <td class="text-end">
-            {{if eq .JenisTransaksi "biaya_admin"}}
+            {{if and (eq .JenisTransaksi "biaya_admin") $.CanWrite}}
             <form method="post" action="/bantuan/{{$.Bantuan.ID}}/bank/hapus/{{.ID}}" class="d-inline" onsubmit="return confirm('Hapus entri ini?');">
-              <button class="btn btn-outline-danger btn-sm" title="Hapus"><i class="bi bi-trash"></i></button>
+              <button class="btn btn-outline-danger btn-sm" title="Hapus" aria-label="Hapus entri"><i class="bi bi-trash"></i></button>
             </form>
             {{else if .InvoiceID}}
             <a class="btn btn-outline-primary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/tagihan/detail/{{.InvoiceID}}" title="Detail Tagihan"><i class="bi bi-receipt"></i></a>
@@ -83,4 +100,5 @@
     </table>
   </div>
 </div>
+{{template "pagination" .Pagination}}
 {{end}}

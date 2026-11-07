@@ -1,0 +1,26 @@
+{{define "content"}}
+<div class="row justify-content-center mt-5">
+  <div class="col-12 col-md-6 col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h4 class="mb-3"><i class="bi bi-shield-lock"></i> Masuk</h4>
+        {{if .Error}}<div class="alert alert-danger">{{.Error}}</div>{{end}}
+        <form method="post" action="/login">
+          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+          <input type="hidden" name="next" value="{{.Next}}">
+          <div class="mb-3">
+            <label class="form-label" for="username">Username</label>
+            <input class="form-control" id="username" name="username" autocomplete="username" required autofocus>
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="password">Password</label>
+            <input class="form-control" type="password" id="password" name="password" autocomplete="current-password" required>
+          </div>
+          <button class="btn btn-primary w-100" type="submit"><i class="bi bi-box-arrow-in-right"></i> Masuk</button>
+        </form>
+      </div>
+    </div>
+    <p class="text-center text-muted small mt-3 mb-0">Banpem-GO — Buku Kas Umum bantuan pemerintah</p>
+  </div>
+</div>
+{{end}}

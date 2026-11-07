@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -89,6 +90,16 @@ func (s *Server) handleBKU(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	views := applyVersion(rows, vi.Base)
+	from, to := dateRangeFromQuery(r)
+	if from != nil || to != nil {
+		filtered := make([]ledgerView, 0, len(views))
+		for _, v := range views {
+			if datePtrInRange(v.Tanggal, from, to) {
+				filtered = append(filtered, v)
+			}
+		}
+		views = filtered
+	}
 	var totDebit, totKredit int64
 	for _, v := range views {
 		totDebit += v.Debit
@@ -98,6 +109,9 @@ func (s *Server) handleBKU(w http.ResponseWriter, r *http.Request) {
 	if len(views) > 0 {
 		saldoAkhir = views[len(views)-1].SaldoDisp
 	}
+	page, perPage := pageParams(r)
+	pagination := buildPagination(r, page, perPage, len(views))
+	views = paginateSlice(views, pagination.Page, perPage)
 	ft, fm := s.getFlash(w, r)
 	data := struct {
 		baseView
@@ -106,10 +120,14 @@ func (s *Server) handleBKU(w http.ResponseWriter, r *http.Request) {
 		TotKredit  int64
 		SaldoAkhir int64
 		Versi      versiInfo
+		Pagination Pagination
+		Dari       string
+		Sampai     string
 	}{
 		baseView: baseView{Title: "Buku Kas Umum", Active: "bku", FlashType: ft, FlashMsg: fm,
 			Bantuan: &b, Summary: s.summary(r.Context(), id, &b), Q: map[string]string{}},
 		Rows: views, TotDebit: totDebit, TotKredit: totKredit, SaldoAkhir: saldoAkhir, Versi: vi,
+		Pagination: pagination, Dari: r.URL.Query().Get("dari"), Sampai: r.URL.Query().Get("sampai"),
 	}
 	s.render(w, r, "bku.html", data)
 }
@@ -128,9 +146,11 @@ func (s *Server) handleBKUReorder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.Store.ReorderLedger(r.Context(), id, "bku", body.Order); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("reorder bku: %v", err)
+		http.Error(w, "gagal menyimpan urutan", http.StatusInternalServerError)
 		return
 	}
+	s.audit(r, &id, "reorder", "ledger_bku", nil, map[string]any{"count": len(body.Order)})
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"ok": true})
 }
@@ -157,18 +177,34 @@ func (s *Server) handleBKUTambahGet(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "bku_manual_form.html", data)
 }
 
-func parseLedgerForm(r *http.Request) store.LedgerEntry {
-	debit, _ := money.Parse(formStr(r, "debit"))
-	kredit, _ := money.Parse(formStr(r, "kredit"))
-	tgl := store.ParseDate(formStr(r, "tanggal"))
+func parseLedgerForm(r *http.Request) (store.LedgerEntry, error) {
+	debit, err := money.ParseNonNegative(formStr(r, "debit"))
+	if err != nil && formStr(r, "debit") != "" {
+		return store.LedgerEntry{}, err
+	}
+	kredit, err := money.ParseNonNegative(formStr(r, "kredit"))
+	if err != nil && formStr(r, "kredit") != "" {
+		return store.LedgerEntry{}, err
+	}
+	if (debit > 0) == (kredit > 0) {
+		return store.LedgerEntry{}, store.ErrInvalidInput
+	}
+	tgl, err := store.ParseDateStrict(formStr(r, "tanggal"))
+	if err != nil {
+		return store.LedgerEntry{}, err
+	}
+	uraian := formStr(r, "uraian")
+	if uraian == "" {
+		return store.LedgerEntry{}, store.ErrInvalidInput
+	}
 	return store.LedgerEntry{
 		Tanggal:        &tgl,
 		NomorBukti:     formStr(r, "nomor_bukti"),
-		Uraian:         formStr(r, "uraian"),
+		Uraian:         uraian,
 		Debit:          debit,
 		Kredit:         kredit,
-		JenisTransaksi: formStr(r, "jenis_transaksi"),
-	}
+		JenisTransaksi: "manual",
+	}, nil
 }
 
 func (s *Server) handleBKUTambahPost(w http.ResponseWriter, r *http.Request) {
@@ -177,13 +213,9 @@ func (s *Server) handleBKUTambahPost(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
-	e := parseLedgerForm(r)
-	if e.JenisTransaksi == "" {
-		e.JenisTransaksi = "manual"
-	}
-	if e.Uraian == "" {
-		s.setFlash(w, "danger", "Uraian wajib diisi.")
-		s.redirect(w, r, "/bantuan/"+i64s(id)+"/bku/tambah")
+	e, err := parseLedgerForm(r)
+	if err != nil {
+		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/bku/tambah")
 		return
 	}
 	e.BantuanID = id
@@ -191,6 +223,7 @@ func (s *Server) handleBKUTambahPost(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/bku/tambah")
 		return
 	}
+	s.audit(r, &id, "create", "ledger_manual", nil, map[string]any{"uraian": e.Uraian, "debit": e.Debit, "kredit": e.Kredit})
 	s.setFlash(w, "success", "Entri manual berhasil ditambahkan.")
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/bku")
 }
@@ -211,12 +244,12 @@ func (s *Server) handleBKUEditGet(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
-	e, err := s.Store.GetLedgerEntry(r.Context(), eid, "bku")
+	e, err := s.Store.GetLedgerEntry(r.Context(), id, eid, "bku")
 	if err != nil {
 		s.fail(w, r, err, "/")
 		return
 	}
-	if e.InvoiceID != nil {
+	if e.InvoiceID != nil || e.JenisTransaksi != "manual" {
 		s.fail(w, r, errInvalidManual, "/")
 		return
 	}
@@ -249,12 +282,17 @@ func (s *Server) handleBKUEditPost(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
-	e := parseLedgerForm(r)
-	e.BantuanID = id
-	if err := s.Store.UpdateManualLedger(r.Context(), eid, e); err != nil {
+	e, err := parseLedgerForm(r)
+	if err != nil {
 		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/bku/edit/"+i64s(eid))
 		return
 	}
+	e.BantuanID = id
+	if err := s.Store.UpdateManualLedger(r.Context(), id, eid, e); err != nil {
+		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/bku/edit/"+i64s(eid))
+		return
+	}
+	s.audit(r, &id, "update", "ledger_manual", &eid, map[string]any{"uraian": e.Uraian})
 	s.setFlash(w, "success", "Entri berhasil diperbarui.")
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/bku")
 }
@@ -270,10 +308,11 @@ func (s *Server) handleBKUHapus(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
-	if err := s.Store.DeleteManualLedger(r.Context(), eid); err != nil {
+	if err := s.Store.DeleteManualLedger(r.Context(), id, eid); err != nil {
 		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/bku")
 		return
 	}
+	s.audit(r, &id, "delete", "ledger_manual", &eid, nil)
 	s.setFlash(w, "success", "Entri berhasil dihapus.")
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/bku")
 }
@@ -294,7 +333,7 @@ func (s *Server) handleBKUDetail(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
-	e, err := s.Store.GetLedgerEntry(r.Context(), eid, "bku")
+	e, err := s.Store.GetLedgerEntry(r.Context(), id, eid, "bku")
 	if err != nil {
 		s.fail(w, r, err, "/")
 		return
@@ -381,8 +420,8 @@ func (s *Server) setorFormData(r *http.Request, sid int64, edit bool) (*setorFor
 			}
 		}
 		rows.Close()
-		le, err := s.Store.GetLedgerEntry(r.Context(), sid, "bku")
-		if err == nil {
+		le, err := s.Store.GetLedgerEntry(r.Context(), id, sid, "bku")
+		if err == nil && le.JenisTransaksi == "setor_pajak" {
 			v.SetorID = sid
 			if le.Tanggal != nil {
 				v.Tanggal = le.Tanggal.Format("2006-01-02")
@@ -484,10 +523,20 @@ func parseSetorForm(r *http.Request) (store.SetorInput, error) {
 	if err != nil {
 		return store.SetorInput{}, err
 	}
+	tgl, err := store.ParseDateStrict(formStr(r, "tanggal"))
+	if err != nil {
+		return store.SetorInput{}, err
+	}
+	jenis := formStr(r, "jenis_pajak")
+	switch jenis {
+	case "PPN", "PPh 21", "PPh 22", "PPh 23":
+	default:
+		return store.SetorInput{}, store.ErrInvalidInput
+	}
 	in := store.SetorInput{
 		BantuanID:  id,
-		JenisPajak: formStr(r, "jenis_pajak"),
-		Tanggal:    store.ParseDate(formStr(r, "tanggal")),
+		JenisPajak: jenis,
+		Tanggal:    tgl,
 		NTBN:       formStr(r, "ntbn"),
 		NTPN:       formStr(r, "ntpn"),
 		Keterangan: formStr(r, "keterangan"),
@@ -526,6 +575,7 @@ func (s *Server) handleSetorPost(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/bku/setor-pajak")
 		return
 	}
+	s.audit(r, &id, "create", "setor_pajak", nil, map[string]any{"jenis": in.JenisPajak, "invoice_count": len(in.InvoiceIDs)})
 	s.setFlash(w, "success", "Penyetoran pajak berhasil disimpan.")
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/rekap-pajak")
 }
@@ -546,9 +596,9 @@ func (s *Server) handleSetorDetail(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
-	e, err := s.Store.GetLedgerEntry(r.Context(), sid, "bku")
-	if err != nil {
-		s.fail(w, r, err, "/")
+	e, err := s.Store.GetLedgerEntry(r.Context(), id, sid, "bku")
+	if err != nil || e.JenisTransaksi != "setor_pajak" {
+		s.fail(w, r, store.ErrNotFound, "/")
 		return
 	}
 	rows, err := s.Store.Pool.Query(r.Context(), `SELECT rp.ntbn, rp.ntpn, rp.invoice_id, rp.jenis_pajak, i.uraian
@@ -594,8 +644,8 @@ func (s *Server) handleSetorEditGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := s.setorFormData(r, sid, true)
-	if err != nil {
-		s.fail(w, r, err, "/")
+	if err != nil || v.SetorID != sid {
+		s.fail(w, r, store.ErrNotFound, "/")
 		return
 	}
 	ft, fm := s.getFlash(w, r)
@@ -624,10 +674,11 @@ func (s *Server) handleSetorEditPost(w http.ResponseWriter, r *http.Request) {
 		s.redirect(w, r, "/bantuan/"+i64s(id)+"/bku/setor-pajak/edit/"+i64s(sid))
 		return
 	}
-	if err := s.Store.UpdateSetorPajak(r.Context(), sid, in); err != nil {
+	if err := s.Store.UpdateSetorPajak(r.Context(), id, sid, in); err != nil {
 		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/bku/setor-pajak/edit/"+i64s(sid))
 		return
 	}
+	s.audit(r, &id, "update", "setor_pajak", &sid, map[string]any{"jenis": in.JenisPajak})
 	s.setFlash(w, "success", "Penyetoran pajak berhasil diperbarui.")
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/rekap-pajak")
 }
@@ -643,10 +694,11 @@ func (s *Server) handleSetorHapus(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
-	if err := s.Store.DeleteSetorPajak(r.Context(), sid); err != nil {
+	if err := s.Store.DeleteSetorPajak(r.Context(), id, sid); err != nil {
 		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/rekap-pajak")
 		return
 	}
+	s.audit(r, &id, "delete", "setor_pajak", &sid, nil)
 	s.setFlash(w, "success", "Penyetoran pajak berhasil dihapus.")
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/rekap-pajak")
 }

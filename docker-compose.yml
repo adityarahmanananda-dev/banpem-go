@@ -6,7 +6,24 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL di file .env}
       BACKUP_DIR: /backups
       ADDR: :8080
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      REPORT_CITY: ${REPORT_CITY:-Jakarta}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-12}
+      BACKUP_ON_STARTUP: ${BACKUP_ON_STARTUP:-true}
+      RESYNC_LEDGER_ON_STARTUP: ${RESYNC_LEDGER_ON_STARTUP:-false}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      TZ: Asia/Jakarta
+    init: true
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./backups:/backups
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s

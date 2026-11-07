@@ -1,0 +1,23 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0">{{if .IsEdit}}Edit Pihak Ketiga{{else}}Tambah Pihak Ketiga{{end}}</h4>
+  <a href="/pihak-ketiga" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kembali</a>
+</div>
+<form method="post" class="card">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-12 col-md-7">
+        <label class="form-label" for="nama">Nama Pihak Ketiga</label>
+        <input class="form-control" id="nama" name="nama" value="{{.P.Nama}}" required>
+      </div>
+      <div class="col-12 col-md-5">
+        <label class="form-label" for="npwp">NPWP</label>
+        <input class="form-control" id="npwp" name="npwp" value="{{.P.NPWP}}">
+      </div>
+    </div>
+  </div>
+  <div class="card-footer">
+    <button class="btn btn-primary" type="submit"><i class="bi bi-check-lg"></i> Simpan</button>
+  </div>
+</form>
+{{end}}

@@ -3,7 +3,7 @@
   <h4 class="mb-0"><i class="bi bi-pie-chart"></i> Rekap Pajak</h4>
   <div class="d-flex flex-wrap gap-1">
     <a href="/bantuan/{{.Bantuan.ID}}/bku/setor-pajak" class="btn btn-outline-warning btn-sm"><i class="bi bi-bank"></i> Setor Pajak</a>
-    <a href="/bantuan/{{.Bantuan.ID}}/jasa-giro/tambah?return=rekap" class="btn btn-outline-success btn-sm"><i class="bi bi-plus-lg"></i> Tambah Jasa Giro</a>
+    {{if .CanWrite}}<a href="/bantuan/{{.Bantuan.ID}}/jasa-giro/tambah?return=rekap" class="btn btn-outline-success btn-sm"><i class="bi bi-plus-lg"></i> Tambah Jasa Giro</a>{{end}}
     <div class="dropdown">
       <button class="btn btn-primary btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download"></i> Export</button>
       <ul class="dropdown-menu">
@@ -14,6 +14,14 @@
     </div>
   </div>
 </div>
+
+<form method="get" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label small mb-0" for="dari">Dari tanggal</label><input type="date" class="form-control form-control-sm" id="dari" name="dari" value="{{.Dari}}"></div>
+    <div class="col-auto"><label class="form-label small mb-0" for="sampai">Sampai tanggal</label><input type="date" class="form-control form-control-sm" id="sampai" name="sampai" value="{{.Sampai}}"></div>
+    <div class="col-auto"><button class="btn btn-primary btn-sm" type="submit">Terapkan</button> <a class="btn btn-outline-secondary btn-sm" href="/bantuan/{{.Bantuan.ID}}/rekap-pajak">Reset</a></div>
+  </div>
+</form>
 
 <div class="row g-3 mb-3">
   <div class="col-md-4"><div class="card text-center"><div class="card-body"><div class="text-muted small">Total Pemungutan</div><div class="fs-5 fw-bold">{{fmtMoney .TotalPemungutan}}</div></div></div></div>
@@ -26,7 +34,7 @@
     <div>1. PENERIMAAN PAJAK DARI TAGIHAN</div>
     <div class="d-flex gap-2 align-items-center">
       <span class="small text-muted fw-normal"><i class="bi bi-arrow-up-down"></i> Seret baris untuk mengurutkan</span>
-      <button type="button" class="btn btn-outline-secondary btn-sm atur-urutan" data-target="#rekapPajakTbody"><i class="bi bi-arrow-up-down"></i> Atur Urutan</button>
+      {{if .CanWrite}}<button type="button" class="btn btn-outline-secondary btn-sm atur-urutan" data-target="#rekapPajakTbody"><i class="bi bi-arrow-up-down"></i> Atur Urutan</button>{{end}}
     </div>
   </div>
   <div class="table-responsive">
@@ -87,10 +95,12 @@
           <td class="text-end">{{fmtMoney $e.Debit}}</td>
           <td class="text-end">
             <a class="btn btn-outline-secondary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/bku/setor-pajak/detail/{{$e.ID}}"><i class="bi bi-eye"></i></a>
+            {{if $.CanWrite}}
             <a class="btn btn-outline-secondary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/bku/setor-pajak/edit/{{$e.ID}}"><i class="bi bi-pencil"></i></a>
             <form method="post" action="/bantuan/{{$.Bantuan.ID}}/bku/setor-pajak/hapus/{{$e.ID}}" class="d-inline" onsubmit="return confirm('Hapus penyetoran ini?');">
               <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
             </form>
+            {{end}}
           </td>
         </tr>
         {{else}}
@@ -116,10 +126,10 @@
           <td>{{$j.Uraian}}</td>
           <td class="text-end">{{fmtMoney $j.Nominal}}</td>
           <td class="text-end">
-            <form method="post" action="/bantuan/{{$.Bantuan.ID}}/jasa-giro/hapus/{{$j.ID}}?return=rekap" class="d-inline"
+            {{if $.CanWrite}}<form method="post" action="/bantuan/{{$.Bantuan.ID}}/jasa-giro/hapus/{{$j.ID}}?return=rekap" class="d-inline"
               onsubmit="return confirm('Hapus jasa giro ini beserta entri BKU terkait?');">
               <button class="btn btn-outline-danger btn-sm" title="Hapus"><i class="bi bi-trash"></i></button>
-            </form>
+            </form>{{end}}
           </td>
         </tr>
         {{else}}

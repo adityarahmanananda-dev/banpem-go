@@ -46,7 +46,17 @@ func (s *Store) CreateBantuan(ctx context.Context, b Bantuan) (int64, error) {
 }
 
 func (s *Store) UpdateBantuan(ctx context.Context, b Bantuan) error {
-	return s.WithTx(ctx, func(tx Tx) error {
+	return s.WithBantuanTx(ctx, b.ID, func(tx Tx) error {
+		if b.Nominal != nil && *b.Nominal > 0 {
+			var total int64
+			if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(nominal),0) FROM pencairan_hibah WHERE bantuan_id=$1`,
+				b.ID).Scan(&total); err != nil {
+				return err
+			}
+			if total > *b.Nominal {
+				return ErrPencairanExceedsTotal
+			}
+		}
 		_, err := tx.Exec(ctx, `UPDATE bantuan SET
 			nama=$1, nama_sekolah=$2, nama_rekening=$3, nomor_rekening=$4, bank=$5, npwp=$6,
 			kepala_sekolah=$7, nip_kepala_sekolah=$8, bendahara=$9, nip_bendahara=$10, nominal=$11
@@ -147,7 +157,7 @@ func setSaldoAwalTx(ctx context.Context, q Querier, bantuanID, saldo int64, tang
 // SetSaldoAwal menyimpan saldo awal dan memastikan entri 'saldo_awal' nomor 1
 // di BKU dan Buku Kas Bank.
 func (s *Store) SetSaldoAwal(ctx context.Context, bantuanID, saldo int64, tanggal time.Time) error {
-	return s.WithTx(ctx, func(tx Tx) error {
+	return s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
 		return setSaldoAwalTx(ctx, tx, bantuanID, saldo, tanggal)
 	})
 }
@@ -162,7 +172,7 @@ func (s *Store) EnsureAutoPencairan(ctx context.Context, bantuanID int64) error 
 	if b.Nominal == nil || *b.Nominal <= 0 {
 		return nil
 	}
-	return s.WithTx(ctx, func(tx Tx) error {
+	return s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
 		var cnt int
 		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM pencairan_hibah WHERE bantuan_id=$1`, bantuanID).Scan(&cnt); err != nil {
 			return err
@@ -198,9 +208,10 @@ func (s *Store) ListPencairan(ctx context.Context, bantuanID int64) ([]Pencairan
 	return out, rows.Err()
 }
 
-func (s *Store) GetPencairan(ctx context.Context, id int64) (Pencairan, error) {
+func (s *Store) GetPencairan(ctx context.Context, bantuanID, id int64) (Pencairan, error) {
 	var p Pencairan
-	err := s.Pool.QueryRow(ctx, `SELECT id, bantuan_id, tahap, tanggal, nominal, keterangan FROM pencairan_hibah WHERE id=$1`, id).
+	err := s.Pool.QueryRow(ctx, `SELECT id, bantuan_id, tahap, tanggal, nominal, keterangan
+		FROM pencairan_hibah WHERE id=$1 AND bantuan_id=$2`, id, bantuanID).
 		Scan(&p.ID, &p.BantuanID, &p.Tahap, &p.Tanggal, &p.Nominal, &p.Keterangan)
 	return p, err
 }
@@ -225,7 +236,24 @@ func (s *Store) FirstPencairanNominal(ctx context.Context, bantuanID int64) int6
 }
 
 func (s *Store) CreatePencairan(ctx context.Context, bantuanID int64, p Pencairan) error {
-	return s.WithTx(ctx, func(tx Tx) error {
+	return s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
+		if p.Nominal <= 0 || p.Tanggal == nil {
+			return ErrInvalidInput
+		}
+		b, err := getBantuanQ(ctx, tx, bantuanID)
+		if err != nil {
+			return err
+		}
+		if b.Nominal != nil && *b.Nominal > 0 {
+			var total int64
+			if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(nominal),0) FROM pencairan_hibah WHERE bantuan_id=$1`,
+				bantuanID).Scan(&total); err != nil {
+				return err
+			}
+			if total+p.Nominal > *b.Nominal {
+				return ErrPencairanExceedsTotal
+			}
+		}
 		var maxTahap int
 		if err := tx.QueryRow(ctx, `SELECT COALESCE(MAX(tahap),0) FROM pencairan_hibah WHERE bantuan_id=$1`, bantuanID).Scan(&maxTahap); err != nil {
 			return err
@@ -234,11 +262,14 @@ func (s *Store) CreatePencairan(ctx context.Context, bantuanID int64, p Pencaira
 			VALUES ($1,$2,$3,$4,$5)`, bantuanID, maxTahap+1, p.Tanggal, p.Nominal, p.Keterangan); err != nil {
 			return err
 		}
-		// Pencairan pertama otomatis menjadi saldo awal bila saldo awal belum
-		// pernah diatur (apapun nilai nominal bantuan).
-		if maxTahap == 0 && p.Tanggal != nil {
+		// Pencairan pertama otomatis menjadi saldo awal, kecuali user sudah
+		// mengatur saldo awal secara manual.
+		if maxTahap == 0 {
 			var cnt int
-			if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM saldo_awal WHERE bantuan_id=$1`, bantuanID).Scan(&cnt); err == nil && cnt == 0 {
+			if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM saldo_awal WHERE bantuan_id=$1`, bantuanID).Scan(&cnt); err != nil {
+				return err
+			}
+			if cnt == 0 {
 				if err := setSaldoAwalTx(ctx, tx, bantuanID, p.Nominal, *p.Tanggal); err != nil {
 					return err
 				}
@@ -248,13 +279,89 @@ func (s *Store) CreatePencairan(ctx context.Context, bantuanID int64, p Pencaira
 	})
 }
 
-func (s *Store) UpdatePencairan(ctx context.Context, p Pencairan) error {
-	_, err := s.Pool.Exec(ctx, `UPDATE pencairan_hibah SET tahap=$1, tanggal=$2, nominal=$3, keterangan=$4 WHERE id=$5`,
-		p.Tahap, p.Tanggal, p.Nominal, p.Keterangan, p.ID)
-	return err
+func (s *Store) UpdatePencairan(ctx context.Context, bantuanID int64, p Pencairan) error {
+	return s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
+		if p.Nominal <= 0 || p.Tanggal == nil {
+			return ErrInvalidInput
+		}
+		var oldNominal int64
+		var oldTanggal *time.Time
+		var oldTahap int
+		if err := tx.QueryRow(ctx, `SELECT nominal, tanggal, tahap FROM pencairan_hibah
+			WHERE id=$1 AND bantuan_id=$2`, p.ID, bantuanID).Scan(&oldNominal, &oldTanggal, &oldTahap); err != nil {
+			return ErrNotFound
+		}
+		if p.Tahap <= 0 {
+			p.Tahap = oldTahap
+		}
+		var tahapUsed bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(
+			SELECT 1 FROM pencairan_hibah WHERE bantuan_id=$1 AND tahap=$2 AND id<>$3)`,
+			bantuanID, p.Tahap, p.ID).Scan(&tahapUsed); err != nil {
+			return err
+		}
+		if tahapUsed {
+			return ErrInvalidInput
+		}
+		b, err := getBantuanQ(ctx, tx, bantuanID)
+		if err != nil {
+			return err
+		}
+		if b.Nominal != nil && *b.Nominal > 0 {
+			var total int64
+			if err := tx.QueryRow(ctx, `SELECT COALESCE(SUM(nominal),0) FROM pencairan_hibah
+				WHERE bantuan_id=$1 AND id<>$2`, bantuanID, p.ID).Scan(&total); err != nil {
+				return err
+			}
+			if total+p.Nominal > *b.Nominal {
+				return ErrPencairanExceedsTotal
+			}
+		}
+		if _, err := tx.Exec(ctx, `UPDATE pencairan_hibah
+			SET tahap=$1, tanggal=$2, nominal=$3, keterangan=$4
+			WHERE id=$5 AND bantuan_id=$6`,
+			p.Tahap, p.Tanggal, p.Nominal, p.Keterangan, p.ID, bantuanID); err != nil {
+			return err
+		}
+		// Jika pencairan pertama berubah, saldo awal harus ikut berubah.
+		var firstID int64
+		if err := tx.QueryRow(ctx, `SELECT id FROM pencairan_hibah WHERE bantuan_id=$1 ORDER BY tahap, id LIMIT 1`,
+			bantuanID).Scan(&firstID); err == nil && firstID == p.ID {
+			if err := setSaldoAwalTx(ctx, tx, bantuanID, p.Nominal, *p.Tanggal); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
-func (s *Store) DeletePencairan(ctx context.Context, id int64) error {
-	_, err := s.Pool.Exec(ctx, `DELETE FROM pencairan_hibah WHERE id=$1`, id)
-	return err
+func (s *Store) DeletePencairan(ctx context.Context, bantuanID, id int64) error {
+	return s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
+		var wasFirst bool
+		var firstID int64
+		if err := tx.QueryRow(ctx, `SELECT id FROM pencairan_hibah WHERE bantuan_id=$1 ORDER BY tahap, id LIMIT 1`,
+			bantuanID).Scan(&firstID); err != nil {
+			return ErrNotFound
+		}
+		wasFirst = firstID == id
+		if _, err := tx.Exec(ctx, `DELETE FROM pencairan_hibah WHERE id=$1 AND bantuan_id=$2`, id, bantuanID); err != nil {
+			return err
+		}
+		if wasFirst {
+			var newNominal int64
+			var newTanggal time.Time
+			err := tx.QueryRow(ctx, `SELECT nominal, tanggal FROM pencairan_hibah
+				WHERE bantuan_id=$1 ORDER BY tahap, id LIMIT 1`, bantuanID).Scan(&newNominal, &newTanggal)
+			if err == nil {
+				if err := setSaldoAwalTx(ctx, tx, bantuanID, newNominal, newTanggal); err != nil {
+					return err
+				}
+			} else {
+				if err := setSaldoAwalTx(ctx, tx, bantuanID, 0, time.Now()); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }

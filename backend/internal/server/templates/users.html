@@ -1,0 +1,77 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-people"></i> Manajemen User</h4>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header fw-bold">Tambah User</div>
+  <div class="card-body">
+    <form method="post" action="/admin/users" class="row g-2">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <div class="col-12 col-md-4">
+        <label class="form-label" for="new-username">Username</label>
+        <input class="form-control" id="new-username" name="username" required autocomplete="off">
+      </div>
+      <div class="col-12 col-md-3">
+        <label class="form-label" for="new-password">Password (min. 10)</label>
+        <input class="form-control" type="password" id="new-password" name="password" minlength="10" required autocomplete="new-password">
+      </div>
+      <div class="col-12 col-md-2">
+        <label class="form-label" for="new-role">Role</label>
+        <select class="form-select" id="new-role" name="role">
+          <option value="bendahara">Bendahara</option>
+          <option value="viewer">Viewer</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-3 d-flex align-items-end">
+        <button class="btn btn-primary w-100" type="submit"><i class="bi bi-plus-lg"></i> Tambah</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Username</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th>Dibuat</th>
+          <th class="text-end">Aksi</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Users}}
+        <tr>
+          <td><b>{{.Username}}</b>{{if and $.User (eq .ID $.User.ID)}} <span class="badge text-bg-info">Anda</span>{{end}}</td>
+          <td><span class="badge text-bg-secondary">{{.Role}}</span></td>
+          <td>
+            {{if .Active}}<span class="badge text-bg-success">Aktif</span>{{else}}<span class="badge text-bg-danger">Nonaktif</span>{{end}}
+          </td>
+          <td>{{.CreatedAt.Format "02-01-2006 15:04"}}</td>
+          <td class="text-end">
+            <form method="post" action="/admin/users/{{.ID}}/toggle" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <input type="hidden" name="active" value="{{if .Active}}0{{else}}1{{end}}">
+              <button class="btn btn-outline-{{if .Active}}danger{{else}}success{{end}} btn-sm" type="submit">
+                {{if .Active}}Nonaktifkan{{else}}Aktifkan{{end}}
+              </button>
+            </form>
+            <form method="post" action="/admin/users/{{.ID}}/password" class="d-inline-flex gap-1 ms-1">
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <input class="form-control form-control-sm" type="password" name="password" minlength="10" placeholder="Password baru" required style="width:150px">
+              <button class="btn btn-outline-primary btn-sm" type="submit">Reset</button>
+            </form>
+          </td>
+        </tr>
+        {{else}}
+        <tr><td colspan="5" class="text-center text-muted">Belum ada user.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}

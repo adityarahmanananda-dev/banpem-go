@@ -26,32 +26,34 @@ type SaldoAwal struct {
 }
 
 type Invoice struct {
-	ID                   int64
-	BantuanID            int64
-	Tanggal              time.Time
-	NomorBukti           string
-	Uraian               string
-	Bruto                int64
-	JenisMenu            int
-	FlagPpn              int
-	FlagPph              int
-	KategoriNarasumber   *int
-	TarifPPH             float64
-	DPP                  int64
-	DPPNilaiLain         int64
-	NilaiPPN             int64
-	NilaiPPH             int64
-	JenisPPH             *string
-	NilaiNetto           int64
-	NamaRekening         string
-	NomorRekening        string
-	Bank                 string
-	NPWP                 string
-	NomorBupotPPN        string
-	NomorBupotPPH        string
-	BiayaAdminDibebankan string
-	JenisBiayaAdmin      string
-	SortOrder            int
+	ID                    int64
+	BantuanID             int64
+	Tanggal               time.Time
+	NomorBukti            string
+	Uraian                string
+	Bruto                 int64
+	JenisMenu             int
+	FlagPpn               int
+	FlagPph               int
+	KategoriNarasumber    *int
+	TarifPPH              float64
+	DPP                   int64
+	DPPNilaiLain          int64
+	NilaiPPN              int64
+	NilaiPPH              int64
+	JenisPPH              *string
+	NilaiNetto            int64
+	NamaRekening          string
+	NomorRekening         string
+	Bank                  string
+	NPWP                  string
+	NomorBupotPPN         string
+	NomorBupotPPH         string
+	BiayaAdminDibebankan  string
+	JenisBiayaAdmin       string
+	SortOrder             int
+	PihakKetigaID         *int64
+	PihakKetigaRekeningID *int64
 }
 
 type Ledger struct {

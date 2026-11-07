@@ -12,14 +12,34 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ebku
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: ebku_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://ebku:test@127.0.0.1:5432/ebku_test?sslmode=disable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
+      - name: Format check
+        run: test -z "$(gofmt -l .)"
       - name: Build
         run: go build ./...
       - name: Vet
         run: go vet ./...
-      - name: Test (tax, money, export)
-        run: go test ./internal/tax/... ./internal/money/... ./internal/export/...
+      - name: Test (all packages, race, coverage)
+        run: go test -race -coverprofile=coverage.out ./...
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -n 1

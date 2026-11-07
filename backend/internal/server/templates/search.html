@@ -1,0 +1,81 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-search"></i> Pencarian</h4>
+  {{if .Query}}<span class="text-muted small">{{.Total}} hasil untuk “{{.Query}}”</span>{{end}}
+</div>
+
+<form method="get" action="/search" class="card card-body mb-3">
+  <div class="input-group">
+    <input class="form-control" type="search" name="q" value="{{.Query}}" placeholder="Cari nama bantuan, sekolah, nomor bukti, uraian..." autofocus>
+    <button class="btn btn-primary" type="submit">Cari</button>
+  </div>
+</form>
+
+{{if .Query}}
+  {{if .Grants}}
+  <div class="card mb-3">
+    <div class="card-header fw-bold">Bantuan</div>
+    <div class="list-group list-group-flush">
+      {{range .Grants}}
+      <a class="list-group-item list-group-item-action d-flex justify-content-between" href="/bantuan/{{.ID}}/bku">
+        <span><b>{{.Nama}}</b>{{if .NamaSekolah}} — {{.NamaSekolah}}{{end}}</span>
+        <span class="text-muted small">{{.Bank}} {{.NomorRekening}}</span>
+      </a>
+      {{end}}
+    </div>
+  </div>
+  {{end}}
+
+  {{if .Invoices}}
+  <div class="card mb-3">
+    <div class="card-header fw-bold">Tagihan</div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light"><tr><th>Tanggal</th><th>Bantuan</th><th>No. Bukti</th><th>Uraian</th><th class="text-end">Bruto</th></tr></thead>
+        <tbody>
+          {{range .Invoices}}
+          <tr>
+            <td class="text-nowrap">{{dateID .Tanggal}}</td>
+            <td>{{.Bantuan}}</td>
+            <td><a href="/bantuan/{{.BantuanID}}/tagihan/detail/{{.InvoiceID}}">{{.NomorBukti}}</a></td>
+            <td>{{.Uraian}}</td>
+            <td class="text-end">{{fmtMoney .Bruto}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{end}}
+
+  {{if .Ledger}}
+  <div class="card mb-3">
+    <div class="card-header fw-bold">Buku Kas</div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light"><tr><th>Tanggal</th><th>Sumber</th><th>Bantuan</th><th>No. Bukti</th><th>Uraian</th><th class="text-end">Debit</th><th class="text-end">Kredit</th></tr></thead>
+        <tbody>
+          {{range .Ledger}}
+          <tr>
+            <td class="text-nowrap">{{if .Tanggal}}{{dateID .Tanggal}}{{end}}</td>
+            <td><span class="badge text-bg-secondary">{{.Sumber}}</span></td>
+            <td>{{.Bantuan}}</td>
+            <td>{{.NomorBukti}}</td>
+            <td>{{.Uraian}}</td>
+            <td class="text-end">{{fmtMoney .Debit}}</td>
+            <td class="text-end">{{fmtMoney .Kredit}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{end}}
+
+  {{if eq .Total 0}}
+  <div class="alert alert-info">Tidak ada hasil untuk “{{.Query}}”.</div>
+  {{end}}
+{{else}}
+<div class="alert alert-light border">Masukkan kata kunci untuk mencari bantuan, tagihan, atau entri buku kas.</div>
+{{end}}
+{{end}}

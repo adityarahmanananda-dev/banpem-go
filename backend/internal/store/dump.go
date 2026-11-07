@@ -20,18 +20,20 @@ var dumpTables = []struct {
 	Cols []dumpCol
 }{
 	{"bantuan", []dumpCol{{"id", "bigint"}, {"nama", "text"}, {"nama_sekolah", "text"}, {"nama_rekening", "text"}, {"nomor_rekening", "text"}, {"bank", "text"}, {"npwp", "text"}, {"kepala_sekolah", "text"}, {"nip_kepala_sekolah", "text"}, {"bendahara", "text"}, {"nip_bendahara", "text"}, {"nominal", "bigint"}, {"created_at", "timestamptz"}}},
+	{"pihak_ketiga", []dumpCol{{"id", "bigint"}, {"nama", "text"}, {"npwp", "text"}, {"created_at", "timestamptz"}, {"updated_at", "timestamptz"}}},
+	{"pihak_ketiga_rekening", []dumpCol{{"id", "bigint"}, {"pihak_ketiga_id", "bigint"}, {"nama_rekening", "text"}, {"nomor_rekening", "text"}, {"bank", "text"}, {"created_at", "timestamptz"}}},
 	{"saldo_awal", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"saldo_awal", "bigint"}, {"tanggal", "date"}, {"created_at", "timestamptz"}}},
 	{"kegiatan", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"nama", "text"}, {"created_at", "timestamptz"}}},
 	{"sub_kegiatan", []dumpCol{{"id", "bigint"}, {"kegiatan_id", "bigint"}, {"nama", "text"}, {"created_at", "timestamptz"}}},
 	{"aktivitas", []dumpCol{{"id", "bigint"}, {"sub_kegiatan_id", "bigint"}, {"nama", "text"}, {"created_at", "timestamptz"}}},
 	{"komponen", []dumpCol{{"id", "bigint"}, {"sub_kegiatan_id", "bigint"}, {"aktivitas_id", "bigint"}, {"nama", "text"}, {"pagu", "bigint"}, {"created_at", "timestamptz"}}},
 	{"pencairan_hibah", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"tahap", "int"}, {"tanggal", "date"}, {"nominal", "bigint"}, {"keterangan", "text"}, {"created_at", "timestamptz"}}},
-	{"trx_invoice", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"tanggal", "date"}, {"nomor_bukti", "text"}, {"uraian", "text"}, {"bruto", "bigint"}, {"jenis_menu", "int"}, {"flag_ppn", "int"}, {"flag_pph", "int"}, {"kategori_narasumber", "int"}, {"dpp", "bigint"}, {"dpp_nilai_lain", "bigint"}, {"nilai_ppn", "bigint"}, {"nilai_pph", "bigint"}, {"jenis_pph", "text"}, {"nilai_netto", "bigint"}, {"nama_rekening", "text"}, {"nomor_rekening", "text"}, {"bank", "text"}, {"npwp", "text"}, {"nomor_bupot_ppn", "text"}, {"nomor_bupot_pph", "text"}, {"biaya_admin_dibebankan", "text"}, {"jenis_biaya_admin", "text"}, {"sort_order", "int"}, {"tarif_pph", "double precision"}}},
-	{"trx_invoice_realisasi", []dumpCol{{"id", "bigint"}, {"invoice_id", "bigint"}, {"komponen_id", "bigint"}, {"bruto", "bigint"}, {"nilai_ppn", "bigint"}, {"nilai_pph", "bigint"}, {"nilai_netto", "bigint"}}},
-	{"jasa_giro", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"tanggal", "date"}, {"nominal", "bigint"}, {"uraian", "text"}}},
-	{"trx_ledger", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"nomor", "int"}, {"tanggal", "date"}, {"nomor_bukti", "text"}, {"uraian", "text"}, {"debit", "bigint"}, {"kredit", "bigint"}, {"saldo", "bigint"}, {"invoice_id", "bigint"}, {"jenis_transaksi", "text"}, {"nomor_bupot", "text"}}},
-	{"trx_bank_ledger", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"nomor", "int"}, {"tanggal", "date"}, {"nomor_bukti", "text"}, {"uraian", "text"}, {"debit", "bigint"}, {"kredit", "bigint"}, {"saldo", "bigint"}, {"invoice_id", "bigint"}, {"jenis_transaksi", "text"}}},
-	{"rekap_pajak", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"tanggal_posting", "date"}, {"ntbn", "text"}, {"ntpn", "text"}, {"invoice_id", "bigint"}, {"jasa_giro", "bigint"}, {"setor_ledger_id", "bigint"}, {"jenis_pajak", "text"}}},
+	{"trx_invoice", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"tanggal", "date"}, {"nomor_bukti", "text"}, {"uraian", "text"}, {"bruto", "bigint"}, {"jenis_menu", "int"}, {"flag_ppn", "int"}, {"flag_pph", "int"}, {"kategori_narasumber", "int"}, {"dpp", "bigint"}, {"dpp_nilai_lain", "bigint"}, {"nilai_ppn", "bigint"}, {"nilai_pph", "bigint"}, {"jenis_pph", "text"}, {"nilai_netto", "bigint"}, {"nama_rekening", "text"}, {"nomor_rekening", "text"}, {"bank", "text"}, {"npwp", "text"}, {"nomor_bupot_ppn", "text"}, {"nomor_bupot_pph", "text"}, {"biaya_admin_dibebankan", "text"}, {"jenis_biaya_admin", "text"}, {"sort_order", "int"}, {"tarif_pph", "double precision"}, {"pihak_ketiga_id", "bigint"}, {"pihak_ketiga_rekening_id", "bigint"}, {"created_at", "timestamptz"}}},
+	{"trx_invoice_realisasi", []dumpCol{{"id", "bigint"}, {"invoice_id", "bigint"}, {"komponen_id", "bigint"}, {"bruto", "bigint"}, {"nilai_ppn", "bigint"}, {"nilai_pph", "bigint"}, {"nilai_netto", "bigint"}, {"created_at", "timestamptz"}}},
+	{"jasa_giro", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"tanggal", "date"}, {"nominal", "bigint"}, {"uraian", "text"}, {"created_at", "timestamptz"}}},
+	{"trx_ledger", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"nomor", "int"}, {"tanggal", "date"}, {"nomor_bukti", "text"}, {"uraian", "text"}, {"debit", "bigint"}, {"kredit", "bigint"}, {"saldo", "bigint"}, {"invoice_id", "bigint"}, {"jenis_transaksi", "text"}, {"nomor_bupot", "text"}, {"created_at", "timestamptz"}}},
+	{"trx_bank_ledger", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"nomor", "int"}, {"tanggal", "date"}, {"nomor_bukti", "text"}, {"uraian", "text"}, {"debit", "bigint"}, {"kredit", "bigint"}, {"saldo", "bigint"}, {"invoice_id", "bigint"}, {"jenis_transaksi", "text"}, {"created_at", "timestamptz"}}},
+	{"rekap_pajak", []dumpCol{{"id", "bigint"}, {"bantuan_id", "bigint"}, {"tanggal_posting", "date"}, {"ntbn", "text"}, {"ntpn", "text"}, {"invoice_id", "bigint"}, {"jasa_giro", "bigint"}, {"setor_ledger_id", "bigint"}, {"jenis_pajak", "text"}, {"created_at", "timestamptz"}}},
 }
 
 func sqlValue(v any, typ string) string {
@@ -43,7 +45,7 @@ func sqlValue(v any, typ string) string {
 		return "'" + strings.ReplaceAll(fmt.Sprint(v), "'", "''") + "'"
 	case "int", "bigint":
 		return fmt.Sprint(v)
-	case "double precision", "numeric":
+	case "double", "double precision", "real", "numeric":
 		return fmt.Sprint(v)
 	case "date":
 		if t, ok := v.(time.Time); ok {
@@ -130,35 +132,88 @@ func (s *Store) DumpDatabase(ctx context.Context) ([]byte, error) {
 	return []byte(b.String()), nil
 }
 
-// ValidateDump memeriksa bahwa isi dump sah (memuat penanda versi dan tabel inti).
+const MaxDumpBytes = 64 << 20 // 64 MB
+
+// ValidateDump memeriksa penanda dump, ukuran, dan membatasi statement agar
+// file restore tidak bisa menjalankan DDL/administrasi PostgreSQL.
 func ValidateDump(data []byte) error {
+	if len(data) == 0 {
+		return fmt.Errorf("file dump kosong")
+	}
+	if len(data) > MaxDumpBytes {
+		return fmt.Errorf("file dump terlalu besar (maksimal 64 MB)")
+	}
 	text := string(data)
 	if !strings.Contains(text, "-- eBKU DATABASE DUMP") {
 		return fmt.Errorf("file bukan dump e-BKU")
 	}
+	if !strings.Contains(text, "-- VERSION: 1") {
+		return fmt.Errorf("versi dump tidak didukung")
+	}
+	allowed := map[string]bool{}
+	for _, t := range dumpTables {
+		allowed[t.Name] = true
+	}
+	coreLine := ""
+	for _, l := range strings.Split(text, "\n") {
+		if strings.HasPrefix(l, "-- TABLES:") {
+			coreLine = l
+			break
+		}
+	}
 	for _, core := range []string{"bantuan", "trx_invoice", "trx_ledger"} {
-		if !strings.Contains(text, "-- TABLES:") {
-			return fmt.Errorf("struktur dump tidak valid")
-		}
-		line := ""
-		for _, l := range strings.Split(text, "\n") {
-			if strings.HasPrefix(l, "-- TABLES:") {
-				line = l
-				break
-			}
-		}
-		if !strings.Contains(line, core) {
+		if !strings.Contains(coreLine, core) {
 			return fmt.Errorf("tabel inti %s tidak ditemukan di struktur dump", core)
 		}
 	}
 	if !strings.Contains(text, "COMMIT;") {
 		return fmt.Errorf("dump tidak lengkap")
 	}
+
+	dangerous := []string{
+		"ALTER ", "CREATE ", "DROP ", "TRUNCATE ", "GRANT ", "REVOKE ",
+		"COPY ", "DO ", "CALL ", "EXECUTE ", "VACUUM ", "REINDEX ",
+		"CLUSTER ", "COMMENT ON ", "SECURITY ", "SET ROLE ", "SELECT ",
+		"UPDATE ", "WITH ",
+	}
+	for _, raw := range strings.Split(text, "\n") {
+		line := strings.TrimSpace(raw)
+		if line == "" || strings.HasPrefix(line, "--") || strings.HasPrefix(line, "(") {
+			continue
+		}
+		lower := strings.ToLower(line)
+		if lower == "begin;" || lower == "commit;" || strings.HasPrefix(lower, "select setval(") {
+			continue
+		}
+		if strings.HasPrefix(lower, "delete from ") {
+			table := strings.Fields(strings.TrimSuffix(line, ";"))[2]
+			if !allowed[strings.Trim(table, `"`)] {
+				return fmt.Errorf("tabel tidak dikenal pada dump: %s", table)
+			}
+			continue
+		}
+		if strings.HasPrefix(lower, "insert into ") {
+			fields := strings.Fields(strings.TrimSuffix(line, ";"))
+			if len(fields) < 3 || !allowed[strings.Trim(fields[2], `"`)] {
+				return fmt.Errorf("tabel tidak dikenal pada dump")
+			}
+			continue
+		}
+		for _, d := range dangerous {
+			if strings.HasPrefix(strings.ToUpper(line), d) {
+				return fmt.Errorf("statement tidak diizinkan pada dump: %s", strings.TrimSpace(line))
+			}
+		}
+		// Baris lanjutan nilai text (mis. uraian multi-baris) diizinkan.
+	}
 	return nil
 }
 
 // ApplyDump mengganti seluruh isi database dengan isi dump.
 func (s *Store) ApplyDump(ctx context.Context, data []byte) error {
+	if err := ValidateDump(data); err != nil {
+		return err
+	}
 	if _, err := s.Pool.Exec(ctx, string(data)); err != nil {
 		return fmt.Errorf("restore gagal: %w", err)
 	}
@@ -167,16 +222,16 @@ func (s *Store) ApplyDump(ctx context.Context, data []byte) error {
 
 // BackupFile menyimpan dump ke file baru di folder dir dengan nama ber-timestamp.
 func (s *Store) BackupFile(ctx context.Context, dir string) (string, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
 	data, err := s.DumpDatabase(ctx)
 	if err != nil {
 		return "", err
 	}
-	name := "ebku_backup_" + time.Now().Format("20060102_150405") + ".db"
+	name := "ebku_backup_" + time.Now().Format("20060102_150405") + ".sql"
 	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return "", err
 	}
 	return path, s.PruneBackups(dir, 10)
@@ -184,10 +239,15 @@ func (s *Store) BackupFile(ctx context.Context, dir string) (string, error) {
 
 // PruneBackups menyisakan N backup terakhir, sisanya dihapus.
 func (s *Store) PruneBackups(dir string, keep int) error {
-	entries, err := filepath.Glob(filepath.Join(dir, "ebku_backup_*.db"))
+	entries, err := filepath.Glob(filepath.Join(dir, "ebku_backup_*.sql"))
 	if err != nil {
 		return err
 	}
+	old, err := filepath.Glob(filepath.Join(dir, "ebku_backup_*.db"))
+	if err != nil {
+		return err
+	}
+	entries = append(entries, old...)
 	sort.Strings(entries)
 	if len(entries) <= keep {
 		return nil

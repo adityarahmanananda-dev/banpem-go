@@ -35,8 +35,11 @@ func (s *Server) handleBantuanMenu(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "menu.html", data)
 }
 
-func bantuanFromForm(r *http.Request) store.Bantuan {
-	nominal, _ := money.Parse(formStr(r, "nominal"))
+func bantuanFromForm(r *http.Request) (store.Bantuan, error) {
+	nominal, err := money.ParseNonNegative(formStr(r, "nominal"))
+	if err != nil && formStr(r, "nominal") != "" {
+		return store.Bantuan{}, err
+	}
 	var nominalPtr *int64
 	if nominal > 0 {
 		nominalPtr = &nominal
@@ -53,7 +56,7 @@ func bantuanFromForm(r *http.Request) store.Bantuan {
 		Bendahara:        formStr(r, "bendahara"),
 		NIPBendahara:     formStr(r, "nip_bendahara"),
 		Nominal:          nominalPtr,
-	}
+	}, nil
 }
 
 func (s *Server) handleBantuanTambahGet(w http.ResponseWriter, r *http.Request) {
@@ -68,7 +71,11 @@ func (s *Server) handleBantuanTambahGet(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleBantuanTambahPost(w http.ResponseWriter, r *http.Request) {
-	b := bantuanFromForm(r)
+	b, err := bantuanFromForm(r)
+	if err != nil {
+		s.fail(w, r, err, "/bantuan/tambah")
+		return
+	}
 	if b.Nama == "" {
 		s.setFlash(w, "danger", "Nama bantuan wajib diisi.")
 		s.redirect(w, r, "/bantuan/tambah")
@@ -79,6 +86,7 @@ func (s *Server) handleBantuanTambahPost(w http.ResponseWriter, r *http.Request)
 		s.fail(w, r, err, "/bantuan/tambah")
 		return
 	}
+	s.audit(r, &id, "create", "bantuan", &id, map[string]any{"nama": b.Nama})
 	s.setFlash(w, "success", "Bantuan berhasil ditambahkan.")
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/bku")
 }
@@ -112,12 +120,22 @@ func (s *Server) handleBantuanEditPost(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
-	b := bantuanFromForm(r)
+	b, err := bantuanFromForm(r)
+	if err != nil {
+		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/edit")
+		return
+	}
+	if b.Nama == "" {
+		s.setFlash(w, "danger", "Nama bantuan wajib diisi.")
+		s.redirect(w, r, "/bantuan/"+i64s(id)+"/edit")
+		return
+	}
 	b.ID = id
 	if err := s.Store.UpdateBantuan(r.Context(), b); err != nil {
 		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/edit")
 		return
 	}
+	s.audit(r, &id, "update", "bantuan", &id, map[string]any{"nama": b.Nama, "nominal": b.Nominal})
 	s.setFlash(w, "success", "Bantuan berhasil diperbarui.")
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/bku")
 }
@@ -165,12 +183,21 @@ func (s *Server) handleSaldoAwalPost(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
-	saldo, _ := money.Parse(formStr(r, "saldo_awal"))
-	tgl := store.ParseDate(formStr(r, "tanggal"))
+	saldo, err := money.ParseNonNegative(formStr(r, "saldo_awal"))
+	if err != nil {
+		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/saldo-awal")
+		return
+	}
+	tgl, err := store.ParseDateStrict(formStr(r, "tanggal"))
+	if err != nil {
+		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/saldo-awal")
+		return
+	}
 	if err := s.Store.SetSaldoAwal(r.Context(), id, saldo, tgl); err != nil {
 		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/saldo-awal")
 		return
 	}
+	s.audit(r, &id, "update", "saldo_awal", nil, map[string]any{"saldo": saldo})
 	s.setFlash(w, "success", "Saldo awal berhasil disimpan.")
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/bku")
 }

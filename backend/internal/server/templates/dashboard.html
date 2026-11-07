@@ -2,9 +2,81 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="mb-0">Dashboard</h4>
   <div>
+    {{if .IsAdmin}}
     <a href="/export-database" class="btn btn-outline-primary btn-sm"><i class="bi bi-box-arrow-down"></i> Export DB</a>
     <button type="button" class="btn btn-outline-warning btn-sm" data-bs-toggle="modal" data-bs-target="#importModal"><i class="bi bi-box-arrow-in-up"></i> Import DB</button>
+    {{end}}
+    {{if .CanWrite}}
     <a href="/bantuan/tambah" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Tambah Bantuan</a>
+    {{end}}
+  </div>
+</div>
+
+<form method="get" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-12 col-md-5">
+      <label class="form-label small mb-1" for="filterBantuan">Filter Bantuan</label>
+      <select class="form-select" id="filterBantuan" name="bantuan_id" onchange="this.form.submit()">
+        <option value="">Semua Bantuan</option>
+        {{range .BantuanOptions}}
+        <option value="{{.ID}}" {{if eq .ID $.SelectedBantuanID}}selected{{end}}>{{.Nama}}{{if .NamaSekolah}} — {{.NamaSekolah}}{{end}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div class="col-12 col-md-4">
+      {{if .SelectedBantuanName}}<span class="text-muted small">Menampilkan: <b>{{.SelectedBantuanName}}</b></span>{{else}}<span class="text-muted small">Menampilkan seluruh bantuan</span>{{end}}
+    </div>
+    <div class="col-12 col-md-3 d-flex gap-2">
+      <button class="btn btn-primary btn-sm" type="submit">Terapkan</button>
+      <a class="btn btn-outline-secondary btn-sm" href="/">Reset</a>
+    </div>
+  </div>
+</form>
+
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-4 col-xl">
+    <div class="card text-center h-100"><div class="card-body py-2">
+      <div class="text-muted small">Total Nominal</div><div class="fw-bold">{{fmtMoney .TotalNominal}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-4 col-xl">
+    <div class="card text-center h-100"><div class="card-body py-2">
+      <div class="text-muted small">Dana Turun</div><div class="fw-bold">{{fmtMoney .TotalTurun}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-4 col-xl">
+    <div class="card text-center h-100"><div class="card-body py-2">
+      <div class="text-muted small">Realisasi Belanja</div><div class="fw-bold">{{fmtMoney .TotalRealisasi}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-6 col-xl">
+    <div class="card text-center h-100"><div class="card-body py-2">
+      <div class="text-muted small">Saldo BKU</div><div class="fw-bold">{{fmtMoney .TotalSaldoBKU}}</div>
+    </div></div>
+  </div>
+  <div class="col-6 col-md-6 col-xl">
+    <div class="card text-center h-100"><div class="card-body py-2">
+      <div class="text-muted small">Saldo Bank</div><div class="fw-bold">{{fmtMoney .TotalSaldoBank}}</div>
+    </div></div>
+  </div>
+</div>
+
+<div class="card mb-3">
+  <div class="card-header fw-bold"><i class="bi bi-bar-chart"></i> Realisasi Belanja 12 Bulan Terakhir{{if .SelectedBantuanName}} — {{.SelectedBantuanName}}{{end}}</div>
+  <div class="card-body">
+    {{if .MaxMonthly}}
+    <div class="chart-bars" role="img" aria-label="Grafik realisasi belanja per bulan">
+      {{range .Monthly}}
+      <div class="chart-col">
+        <div class="chart-value">{{fmtMoney .Total}}</div>
+        <div class="chart-bar" style="height: {{pct .Total $.MaxMonthly}}%" title="{{.Bulan.Format "January 2006"}}: {{fmtMoney .Total}}"></div>
+        <div class="chart-label">{{.Bulan.Format "Jan 06"}}</div>
+      </div>
+      {{end}}
+    </div>
+    {{else}}
+    <p class="text-muted mb-0">Belum ada data belanja untuk grafik.</p>
+    {{end}}
   </div>
 </div>
 
@@ -24,6 +96,12 @@
         <div class="d-flex justify-content-between"><span class="text-muted">Dana Turun</span><b>{{fmtMoney $s.TotalTurun}}</b></div>
         <div class="d-flex justify-content-between"><span class="text-muted">Bank / No. Rekening</span><b>{{$s.NamaRekening}} {{$s.NomorRekening}}</b></div>
         <div class="d-flex justify-content-between"><span class="text-muted">Jumlah Tagihan</span><b>{{$s.InvoiceCount}}</b></div>
+        <div class="mt-2">
+          <div class="progress" style="height:6px" role="progressbar" aria-label="Dana turun terhadap nominal" aria-valuenow="{{pct $s.TotalTurun (int64p $s.Nominal)}}" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-bar" style="width: {{pct $s.TotalTurun (int64p $s.Nominal)}}%"></div>
+          </div>
+          <div class="small text-muted mt-1">Dana turun {{pct $s.TotalTurun (int64p $s.Nominal)}}% dari nominal</div>
+        </div>
       </div>
       <div class="card-footer">
         <div class="row g-2">
@@ -54,8 +132,10 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted small">Unggah file backup <code>.db</code>. Database saat ini akan di-backup otomatis sebelum diganti.</p>
-        <input type="file" class="form-control" name="file" accept=".db">
+        <p class="text-muted small">Unggah file backup <code>.sql</code> atau <code>.db</code>. Database saat ini akan di-backup otomatis sebelum diganti.</p>
+        <input type="file" class="form-control mb-2" name="file" accept=".sql,.db" required>
+        <label class="form-label small" for="importConfirm">Ketik <b>RESTORE</b> untuk konfirmasi</label>
+        <input class="form-control" id="importConfirm" name="confirm" placeholder="RESTORE" required>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>

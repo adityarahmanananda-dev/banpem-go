@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"log"
 	"net/http"
 
 	"ebku/internal/store"
@@ -29,6 +30,26 @@ type dashboardStat struct {
 
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	bantuanID := int64(atoi0(r.URL.Query().Get("bantuan_id")))
+	bantuanList, err := s.Store.ListBantuan(ctx)
+	if err != nil {
+		s.fail(w, r, err, "/")
+		return
+	}
+	selectedBantuanName := ""
+	if bantuanID > 0 {
+		found := false
+		for _, b := range bantuanList {
+			if b.ID == bantuanID {
+				found = true
+				selectedBantuanName = b.Nama
+				break
+			}
+		}
+		if !found {
+			bantuanID = 0
+		}
+	}
 	rows, err := s.Store.Pool.Query(ctx, `SELECT b.id, b.nama, b.nama_sekolah, b.nama_rekening, b.nomor_rekening, b.bank, b.nominal,
 		COALESCE(sa.saldo_awal,0) AS saldo_awal,
 		COALESCE(pc.total,0) AS total_turun,
@@ -49,7 +70,8 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN (SELECT bantuan_id, SUM(nilai_ppn)+SUM(nilai_pph) total FROM trx_invoice GROUP BY bantuan_id) ip ON ip.bantuan_id=b.id
 		LEFT JOIN (SELECT bantuan_id, SUM(nominal) total FROM jasa_giro GROUP BY bantuan_id) jg ON jg.bantuan_id=b.id
 		LEFT JOIN LATERAL (SELECT saldo FROM trx_bank_ledger WHERE bantuan_id=b.id ORDER BY nomor DESC LIMIT 1) be ON true
-		ORDER BY b.id`)
+		WHERE ($1 = 0 OR b.id = $1)
+		ORDER BY b.id`, bantuanID)
 	if err != nil {
 		s.fail(w, r, err, "/")
 		return
@@ -71,12 +93,52 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ft, fm := s.getFlash(w, r)
+	var totalNominal, totalTurun, totalRealisasi, totalSaldoBKU, totalSaldoBank int64
+	for _, st := range stats {
+		if st.Nominal != nil {
+			totalNominal += *st.Nominal
+		}
+		totalTurun += st.TotalTurun
+		totalRealisasi += st.TotalBelanja
+		totalSaldoBKU += st.SaldoBKU
+		totalSaldoBank += st.SaldoBank
+	}
+	monthly, err := s.Store.MonthlyBelanja(r.Context(), bantuanID, 12)
+	if err != nil {
+		log.Printf("dashboard monthly: %v", err)
+	}
+	var maxMonthly int64
+	for _, m := range monthly {
+		if m.Total > maxMonthly {
+			maxMonthly = m.Total
+		}
+	}
 	data := struct {
 		baseView
-		Stats []dashboardStat
+		Stats               []dashboardStat
+		Monthly             []store.MonthlyBelanja
+		MaxMonthly          int64
+		TotalNominal        int64
+		TotalTurun          int64
+		TotalRealisasi      int64
+		TotalSaldoBKU       int64
+		TotalSaldoBank      int64
+		BantuanOptions      []store.Bantuan
+		SelectedBantuanID   int64
+		SelectedBantuanName string
 	}{
-		baseView: baseView{Title: "Dashboard", Active: "dashboard", FlashType: ft, FlashMsg: fm, Q: map[string]string{}},
-		Stats:    stats,
+		baseView:            baseView{Title: "Dashboard", Active: "dashboard", FlashType: ft, FlashMsg: fm, Q: map[string]string{}},
+		Stats:               stats,
+		Monthly:             monthly,
+		MaxMonthly:          maxMonthly,
+		TotalNominal:        totalNominal,
+		TotalTurun:          totalTurun,
+		TotalRealisasi:      totalRealisasi,
+		TotalSaldoBKU:       totalSaldoBKU,
+		TotalSaldoBank:      totalSaldoBank,
+		BantuanOptions:      bantuanList,
+		SelectedBantuanID:   bantuanID,
+		SelectedBantuanName: selectedBantuanName,
 	}
 	s.render(w, r, "dashboard.html", data)
 }

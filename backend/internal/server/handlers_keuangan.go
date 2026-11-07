@@ -85,20 +85,26 @@ func (s *Server) handleJasaGiroTambahPost(w http.ResponseWriter, r *http.Request
 		return
 	}
 	ret := r.URL.Query().Get("return")
-	nominal, err := money.Parse(formStr(r, "nominal"))
-	if err != nil || nominal <= 0 {
+	nominal, err := money.ParsePositive(formStr(r, "nominal"))
+	if err != nil {
 		s.setFlash(w, "danger", "Nominal harus lebih dari 0.")
 		s.redirect(w, r, jasaGiroTambahURL(id, ret))
+		return
+	}
+	tgl, err := store.ParseDateStrict(formStr(r, "tanggal"))
+	if err != nil {
+		s.fail(w, r, err, jasaGiroTambahURL(id, ret))
 		return
 	}
 	uraian := formStr(r, "uraian")
 	if uraian == "" {
 		uraian = "Jasa Giro"
 	}
-	if err := s.Store.CreateJasaGiro(r.Context(), id, store.ParseDate(formStr(r, "tanggal")), nominal, uraian); err != nil {
+	if err := s.Store.CreateJasaGiro(r.Context(), id, tgl, nominal, uraian); err != nil {
 		s.fail(w, r, err, jasaGiroTambahURL(id, ret))
 		return
 	}
+	s.audit(r, &id, "create", "jasa_giro", nil, map[string]any{"nominal": nominal})
 	s.setFlash(w, "success", "Jasa giro berhasil disimpan.")
 	s.redirect(w, r, jasaGiroURL(id, ret))
 }
@@ -115,10 +121,11 @@ func (s *Server) handleJasaGiroHapus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ret := r.URL.Query().Get("return")
-	if err := s.Store.DeleteJasaGiro(r.Context(), jid); err != nil {
+	if err := s.Store.DeleteJasaGiro(r.Context(), id, jid); err != nil {
 		s.fail(w, r, err, jasaGiroURL(id, ret))
 		return
 	}
+	s.audit(r, &id, "delete", "jasa_giro", &jid, nil)
 	s.setFlash(w, "success", "Jasa giro berhasil dihapus.")
 	s.redirect(w, r, jasaGiroURL(id, ret))
 }
@@ -190,14 +197,20 @@ func (s *Server) handlePencairanTambahGet(w http.ResponseWriter, r *http.Request
 	s.render(w, r, "pencairan_form.html", data)
 }
 
-func parsePencairanForm(r *http.Request) store.Pencairan {
-	nominal, _ := money.Parse(formStr(r, "nominal"))
-	t := store.ParseDate(formStr(r, "tanggal"))
+func parsePencairanForm(r *http.Request) (store.Pencairan, error) {
+	nominal, err := money.ParsePositive(formStr(r, "nominal"))
+	if err != nil {
+		return store.Pencairan{}, err
+	}
+	t, err := store.ParseDateStrict(formStr(r, "tanggal"))
+	if err != nil {
+		return store.Pencairan{}, err
+	}
 	return store.Pencairan{
 		Tanggal:    &t,
 		Nominal:    nominal,
 		Keterangan: formStr(r, "keterangan"),
-	}
+	}, nil
 }
 
 func (s *Server) handlePencairanTambahPost(w http.ResponseWriter, r *http.Request) {
@@ -206,16 +219,16 @@ func (s *Server) handlePencairanTambahPost(w http.ResponseWriter, r *http.Reques
 		s.fail(w, r, err, "/")
 		return
 	}
-	p := parsePencairanForm(r)
-	if p.Nominal <= 0 {
-		s.setFlash(w, "danger", "Nominal harus lebih dari 0.")
-		s.redirect(w, r, "/bantuan/"+i64s(id)+"/pencairan/tambah")
+	p, err := parsePencairanForm(r)
+	if err != nil {
+		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/pencairan/tambah")
 		return
 	}
 	if err := s.Store.CreatePencairan(r.Context(), id, p); err != nil {
 		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/pencairan/tambah")
 		return
 	}
+	s.audit(r, &id, "create", "pencairan", nil, map[string]any{"nominal": p.Nominal})
 	s.setFlash(w, "success", "Pencairan berhasil ditambahkan.")
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/pencairan")
 }
@@ -236,7 +249,7 @@ func (s *Server) handlePencairanEditGet(w http.ResponseWriter, r *http.Request) 
 		s.fail(w, r, err, "/")
 		return
 	}
-	p, err := s.Store.GetPencairan(r.Context(), pid)
+	p, err := s.Store.GetPencairan(r.Context(), id, pid)
 	if err != nil {
 		s.fail(w, r, err, "/")
 		return
@@ -268,13 +281,18 @@ func (s *Server) handlePencairanEditPost(w http.ResponseWriter, r *http.Request)
 		s.fail(w, r, err, "/")
 		return
 	}
-	p := parsePencairanForm(r)
-	p.ID = pid
-	p.BantuanID = id
-	if err := s.Store.UpdatePencairan(r.Context(), p); err != nil {
+	p, err := parsePencairanForm(r)
+	if err != nil {
 		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/pencairan/edit/"+i64s(pid))
 		return
 	}
+	p.ID = pid
+	p.BantuanID = id
+	if err := s.Store.UpdatePencairan(r.Context(), id, p); err != nil {
+		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/pencairan/edit/"+i64s(pid))
+		return
+	}
+	s.audit(r, &id, "update", "pencairan", &pid, map[string]any{"nominal": p.Nominal})
 	s.setFlash(w, "success", "Pencairan berhasil diperbarui.")
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/pencairan")
 }
@@ -290,10 +308,11 @@ func (s *Server) handlePencairanHapus(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err, "/")
 		return
 	}
-	if err := s.Store.DeletePencairan(r.Context(), pid); err != nil {
+	if err := s.Store.DeletePencairan(r.Context(), id, pid); err != nil {
 		s.fail(w, r, err, "/bantuan/"+i64s(id)+"/pencairan")
 		return
 	}
+	s.audit(r, &id, "delete", "pencairan", &pid, nil)
 	s.setFlash(w, "success", "Pencairan berhasil dihapus.")
 	s.redirect(w, r, "/bantuan/"+i64s(id)+"/pencairan")
 }

@@ -77,15 +77,50 @@ type SetorInput struct {
 
 // CreateSetorPajak membuat 1 entri BKU 'setor_pajak', N baris REKAP_PAJAK,
 // dan 1 entri Bank 'setor_pajak'.
+func validTaxJenis(j string) bool {
+	switch j {
+	case "PPN", "PPh 21", "PPh 22", "PPh 23":
+		return true
+	}
+	return false
+}
+
 func (s *Store) CreateSetorPajak(ctx context.Context, in SetorInput) error {
-	return s.WithTx(ctx, func(tx Tx) error {
+	if !validTaxJenis(in.JenisPajak) {
+		return ErrInvalidInput
+	}
+	return s.WithBantuanTx(ctx, in.BantuanID, func(tx Tx) error {
 		var nominal int64
+		var validIDs []int64
+		seen := map[int64]bool{}
 		for _, iid := range in.InvoiceIDs {
+			if seen[iid] {
+				continue
+			}
+			seen[iid] = true
 			inv, err := getInvoiceQ(ctx, tx, iid)
 			if err != nil {
 				return err
 			}
-			nominal += TaxValueForJenis(inv, in.JenisPajak)
+			if inv.BantuanID != in.BantuanID {
+				return ErrInvalidInput
+			}
+			val := TaxValueForJenis(inv, in.JenisPajak)
+			if val <= 0 {
+				continue
+			}
+			var deposited bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(
+				SELECT 1 FROM rekap_pajak
+				WHERE invoice_id=$1 AND jenis_pajak=$2 AND setor_ledger_id IS NOT NULL)`,
+				iid, in.JenisPajak).Scan(&deposited); err != nil {
+				return err
+			}
+			if deposited {
+				return ErrTaxAlreadyDeposited
+			}
+			validIDs = append(validIDs, iid)
+			nominal += val
 		}
 		if nominal <= 0 {
 			return ErrNoTaxValue
@@ -103,7 +138,7 @@ func (s *Store) CreateSetorPajak(ctx context.Context, in SetorInput) error {
 		if err != nil {
 			return err
 		}
-		for _, iid := range in.InvoiceIDs {
+		for _, iid := range validIDs {
 			if _, err := tx.Exec(ctx, `INSERT INTO rekap_pajak
 				(bantuan_id, tanggal_posting, ntbn, ntpn, invoice_id, jasa_giro, setor_ledger_id, jenis_pajak)
 				VALUES ($1,$2,$3,$4,$5,0,$6,$7)`,
@@ -129,23 +164,52 @@ func (e *storedError) Error() string { return e.msg }
 
 // UpdateSetorPajak mengedit entri setor: update ledger, rekap dihapus &
 // diinsert ulang, dan entri bank terkait di-update.
-func (s *Store) UpdateSetorPajak(ctx context.Context, setorID int64, in SetorInput) error {
-	return s.WithTx(ctx, func(tx Tx) error {
+func (s *Store) UpdateSetorPajak(ctx context.Context, bantuanID, setorID int64, in SetorInput) error {
+	if !validTaxJenis(in.JenisPajak) {
+		return ErrInvalidInput
+	}
+	return s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
 		var oldDebit int64
 		var oldTanggal time.Time
 		var oldUraian string
-		err := tx.QueryRow(ctx, `SELECT tanggal, uraian, debit FROM trx_ledger WHERE id=$1`, setorID).Scan(&oldTanggal, &oldUraian, &oldDebit)
+		err := tx.QueryRow(ctx, `SELECT tanggal, uraian, debit FROM trx_ledger
+			WHERE id=$1 AND bantuan_id=$2 AND jenis_transaksi='setor_pajak'`,
+			setorID, bantuanID).Scan(&oldTanggal, &oldUraian, &oldDebit)
 		if err != nil {
-			return err
+			return ErrNotFound
 		}
 		oldJenis := in.JenisPajak
 		var nominal int64
+		var validIDs []int64
+		seen := map[int64]bool{}
 		for _, iid := range in.InvoiceIDs {
+			if seen[iid] {
+				continue
+			}
+			seen[iid] = true
 			inv, err := getInvoiceQ(ctx, tx, iid)
 			if err != nil {
 				return err
 			}
-			nominal += TaxValueForJenis(inv, oldJenis)
+			if inv.BantuanID != bantuanID {
+				return ErrInvalidInput
+			}
+			val := TaxValueForJenis(inv, oldJenis)
+			if val <= 0 {
+				continue
+			}
+			var deposited bool
+			if err := tx.QueryRow(ctx, `SELECT EXISTS(
+				SELECT 1 FROM rekap_pajak
+				WHERE invoice_id=$1 AND jenis_pajak=$2 AND setor_ledger_id IS NOT NULL AND setor_ledger_id<>$3)`,
+				iid, oldJenis, setorID).Scan(&deposited); err != nil {
+				return err
+			}
+			if deposited {
+				return ErrTaxAlreadyDeposited
+			}
+			validIDs = append(validIDs, iid)
+			nominal += val
 		}
 		if nominal <= 0 {
 			return ErrNoTaxValue
@@ -160,24 +224,24 @@ func (s *Store) UpdateSetorPajak(ctx context.Context, setorID int64, in SetorInp
 			tgl, nomorBukti, uraian, nominal, setorID); err != nil {
 			return err
 		}
-		if err := RebuildLedger(ctx, tx, in.BantuanID, "bku"); err != nil {
+		if err := RebuildLedger(ctx, tx, bantuanID, "bku"); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `DELETE FROM rekap_pajak WHERE setor_ledger_id=$1`, setorID); err != nil {
 			return err
 		}
-		for _, iid := range in.InvoiceIDs {
+		for _, iid := range validIDs {
 			if _, err := tx.Exec(ctx, `INSERT INTO rekap_pajak
 				(bantuan_id, tanggal_posting, ntbn, ntpn, invoice_id, jasa_giro, setor_ledger_id, jenis_pajak)
 				VALUES ($1,$2,$3,$4,$5,0,$6,$7)`,
-				in.BantuanID, tgl, in.NTBN, in.NTPN, iid, setorID, oldJenis); err != nil {
+				bantuanID, tgl, in.NTBN, in.NTPN, iid, setorID, oldJenis); err != nil {
 				return err
 			}
 		}
 		var bankID int64
 		err = tx.QueryRow(ctx, `SELECT id FROM trx_bank_ledger
 			WHERE bantuan_id=$1 AND jenis_transaksi='setor_pajak' AND tanggal=$2 AND uraian=$3 AND debit=$4
-			ORDER BY id LIMIT 1`, in.BantuanID, oldTanggal, oldUraian, oldDebit).Scan(&bankID)
+			ORDER BY id LIMIT 1`, bantuanID, oldTanggal, oldUraian, oldDebit).Scan(&bankID)
 		if err == nil {
 			if _, err := tx.Exec(ctx, `UPDATE trx_bank_ledger SET tanggal=$1, nomor_bukti=$2, uraian=$3, debit=$4, kredit=0 WHERE id=$5`,
 				tgl, nomorBukti, uraian, nominal, bankID); err != nil {
@@ -187,26 +251,27 @@ func (s *Store) UpdateSetorPajak(ctx context.Context, setorID int64, in SetorInp
 			// Pasangan bank tidak ditemukan (mis. data lama) -> buat baru agar
 			// entri setor pajak tetap ada di kedua buku.
 			if _, err := AppendBankLedger(ctx, tx, LedgerEntry{
-				BantuanID: in.BantuanID, Tanggal: &tgl, NomorBukti: nomorBukti, Uraian: uraian,
+				BantuanID: bantuanID, Tanggal: &tgl, NomorBukti: nomorBukti, Uraian: uraian,
 				Debit: nominal, Kredit: 0, JenisTransaksi: "setor_pajak",
 			}); err != nil {
 				return err
 			}
 		}
-		return RebuildLedger(ctx, tx, in.BantuanID, "bank")
+		return RebuildLedger(ctx, tx, bantuanID, "bank")
 	})
 }
 
 // DeleteSetorPajak menghapus entri BKU, rekap pajak, dan entri bank setor.
-func (s *Store) DeleteSetorPajak(ctx context.Context, setorID int64) error {
-	return s.WithTx(ctx, func(tx Tx) error {
-		var bantuanID int64
+func (s *Store) DeleteSetorPajak(ctx context.Context, bantuanID, setorID int64) error {
+	return s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
 		var oldTanggal time.Time
 		var oldUraian string
 		var oldDebit int64
-		err := tx.QueryRow(ctx, `SELECT bantuan_id, tanggal, uraian, debit FROM trx_ledger WHERE id=$1`, setorID).Scan(&bantuanID, &oldTanggal, &oldUraian, &oldDebit)
+		err := tx.QueryRow(ctx, `SELECT tanggal, uraian, debit FROM trx_ledger
+			WHERE id=$1 AND bantuan_id=$2 AND jenis_transaksi='setor_pajak'`,
+			setorID, bantuanID).Scan(&oldTanggal, &oldUraian, &oldDebit)
 		if err != nil {
-			return err
+			return ErrNotFound
 		}
 		if _, err := tx.Exec(ctx, `DELETE FROM rekap_pajak WHERE setor_ledger_id=$1`, setorID); err != nil {
 			return err
@@ -283,7 +348,7 @@ func (s *Store) ListSetorEntries(ctx context.Context, bantuanID int64) ([]Ledger
 // CreateJasaGiro menyimpan jasa giro + entri BKU 'jasa_giro' (debit = kredit,
 // sehingga saldo tidak berubah karena jasa giro hanya numpang lewat).
 func (s *Store) CreateJasaGiro(ctx context.Context, bantuanID int64, tanggal time.Time, nominal int64, uraian string) error {
-	return s.WithTx(ctx, func(tx Tx) error {
+	return s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
 		if _, err := tx.Exec(ctx, `INSERT INTO jasa_giro (bantuan_id, tanggal, nominal, uraian) VALUES ($1,$2,$3,$4)`,
 			bantuanID, tanggal, nominal, uraian); err != nil {
 			return err
@@ -315,16 +380,15 @@ func (s *Store) ListJasaGiro(ctx context.Context, bantuanID int64) ([]JasaGiro, 
 }
 
 // DeleteJasaGiro menghapus jasa giro beserta entri BKU 'jasa_giro' terkait.
-func (s *Store) DeleteJasaGiro(ctx context.Context, jgID int64) error {
-	return s.WithTx(ctx, func(tx Tx) error {
-		var bantuanID int64
+func (s *Store) DeleteJasaGiro(ctx context.Context, bantuanID, jgID int64) error {
+	return s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
 		var tanggal time.Time
 		var nominal int64
 		var uraian string
-		err := tx.QueryRow(ctx, `SELECT bantuan_id, tanggal, nominal, uraian FROM jasa_giro WHERE id=$1`, jgID).
-			Scan(&bantuanID, &tanggal, &nominal, &uraian)
+		err := tx.QueryRow(ctx, `SELECT tanggal, nominal, uraian FROM jasa_giro WHERE id=$1 AND bantuan_id=$2`,
+			jgID, bantuanID).Scan(&tanggal, &nominal, &uraian)
 		if err != nil {
-			return err
+			return ErrNotFound
 		}
 		if _, err := tx.Exec(ctx, `DELETE FROM jasa_giro WHERE id=$1`, jgID); err != nil {
 			return err
@@ -349,7 +413,7 @@ func (s *Store) PajakBelumSetorAsOf(ctx context.Context, bantuanID int64, tgl ti
 	err := s.Pool.QueryRow(ctx, `SELECT
 		(SELECT COALESCE(SUM(nilai_ppn),0)+COALESCE(SUM(nilai_pph),0) FROM trx_invoice WHERE bantuan_id=$1 AND tanggal<=$2),
 		(SELECT COALESCE(SUM(debit),0) FROM trx_ledger WHERE bantuan_id=$1 AND jenis_transaksi='setor_pajak' AND tanggal<=$2)`,
-		bantuanID, tgl, tgl).Scan(&pemungutan, &setor)
+		bantuanID, tgl).Scan(&pemungutan, &setor)
 	if err != nil {
 		return 0
 	}

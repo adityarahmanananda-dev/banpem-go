@@ -53,9 +53,20 @@ func funcMap() template.FuncMap {
 			}
 			return ""
 		},
-		"add": func(a, b int64) int64 { return a + b },
-		"sub": func(a, b int64) int64 { return a - b },
-		"inc": func(i int) int { return i + 1 },
+		"add":  func(a, b int64) int64 { return a + b },
+		"sub":  func(a, b int64) int64 { return a - b },
+		"addi": func(a, b int) int { return a + b },
+		"inc":  func(i int) int { return i + 1 },
+		"pct": func(v, max int64) int {
+			if max <= 0 || v <= 0 {
+				return 0
+			}
+			n := int((float64(v) / float64(max)) * 100)
+			if n > 100 {
+				n = 100
+			}
+			return n
+		},
 		"kegColor": func(i int) string {
 			c := []string{"primary", "success", "danger", "info", "secondary", "dark"}[i%6]
 			if c == "warning" {
@@ -89,7 +100,7 @@ func funcMap() template.FuncMap {
 		"splitp": func(s, sep string) []string {
 			return strings.Split(s, sep)
 		},
-		"formatNPWP": formatNPWP,
+		"formatNPWP":  formatNPWP,
 		"roman":       romanNumeral,
 		"letterUpper": letterUpper,
 		"letterLower": letterLower,
@@ -139,11 +150,36 @@ type bantuanSummary struct {
 
 // baseView adalah data umum setiap halaman.
 type baseView struct {
-	Title     string
-	Active    string
-	FlashType string
-	FlashMsg  string
-	Bantuan   *store.Bantuan
-	Summary   *bantuanSummary
-	Q         map[string]string
+	Title       string
+	Active      string
+	FlashType   string
+	FlashMsg    string
+	Bantuan     *store.Bantuan
+	Summary     *bantuanSummary
+	Q           map[string]string
+	User        *store.User
+	CSRF        string
+	SearchQuery string
+}
+
+func (v baseView) CanWrite() bool {
+	return v.User != nil && v.User.Role != store.RoleViewer
+}
+
+func (v baseView) IsAdmin() bool {
+	return v.User != nil && v.User.Role == store.RoleAdmin
+}
+
+func (v baseView) RoleLabel() string {
+	if v.User == nil {
+		return ""
+	}
+	switch v.User.Role {
+	case store.RoleAdmin:
+		return "Admin"
+	case store.RoleBendahara:
+		return "Bendahara"
+	default:
+		return "Viewer"
+	}
 }

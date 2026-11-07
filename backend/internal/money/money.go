@@ -4,9 +4,16 @@
 package money
 
 import (
+	"errors"
 	"math/big"
 	"strconv"
 	"strings"
+)
+
+var (
+	ErrInvalidAmount  = errors.New("nominal tidak valid")
+	ErrNegativeAmount = errors.New("nominal tidak boleh negatif")
+	ErrZeroAmount     = errors.New("nominal harus lebih dari 0")
 )
 
 // MulDiv menghitung x*p/q dengan pembulatan half-even ke bilangan bulat.
@@ -132,6 +139,67 @@ func isAllDigits(s string) bool {
 		}
 	}
 	return s != ""
+}
+
+// ParseStrict seperti Parse, tetapi menolak karakter selain digit, titik,
+// koma, dan tanda minus di awal. Dipakai untuk validasi input form.
+func ParseStrict(s string) (int64, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, ErrInvalidAmount
+	}
+	body := s
+	if strings.HasPrefix(body, "-") {
+		body = body[1:]
+	}
+	if body == "" {
+		return 0, ErrInvalidAmount
+	}
+	for _, r := range body {
+		if (r < '0' || r > '9') && r != '.' && r != ',' {
+			return 0, ErrInvalidAmount
+		}
+	}
+	if strings.Count(body, ",") > 1 {
+		return 0, ErrInvalidAmount
+	}
+	whole := body
+	if i := strings.IndexByte(whole, ','); i >= 0 {
+		whole = whole[:i]
+	}
+	if strings.Count(whole, ".") > 1 {
+		parts := strings.Split(whole, ".")
+		for i := 1; i < len(parts); i++ {
+			if len(parts[i]) != 3 {
+				return 0, ErrInvalidAmount
+			}
+		}
+	}
+	return Parse(s)
+}
+
+// ParseNonNegative memastikan nilai >= 0.
+func ParseNonNegative(s string) (int64, error) {
+	v, err := ParseStrict(s)
+	if err != nil {
+		return 0, err
+	}
+	if v < 0 {
+		return 0, ErrNegativeAmount
+	}
+	return v, nil
+}
+
+// ParsePositive memastikan nilai > 0.
+func ParsePositive(s string) (int64, error) {
+	v, err := ParseNonNegative(s)
+	if err != nil {
+		return 0, err
+	}
+	if v == 0 {
+		return 0, ErrZeroAmount
+	}
+	return v, nil
 }
 
 // Parse mengubah input user menjadi sen. Menerima "1000000", "1.000.000",

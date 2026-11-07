@@ -3,9 +3,25 @@
   <h4 class="mb-0">Daftar Tagihan</h4>
   <div>
     <a href="/bantuan/{{.Bantuan.ID}}/tagihan/daftar" class="btn btn-outline-secondary btn-sm"><i class="bi bi-list-ul"></i> Daftar Tagihan</a>
-    <a href="/bantuan/{{.Bantuan.ID}}/tagihan/tambah" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Input Tagihan</a>
+    {{if .CanWrite}}<a href="/bantuan/{{.Bantuan.ID}}/tagihan/tambah" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Input Tagihan</a>{{end}}
   </div>
 </div>
+
+<form method="get" class="card card-body mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-auto"><label class="form-label small mb-0" for="dari">Dari</label><input type="date" class="form-control form-control-sm" id="dari" name="dari" value="{{.Dari}}"></div>
+    <div class="col-auto"><label class="form-label small mb-0" for="sampai">Sampai</label><input type="date" class="form-control form-control-sm" id="sampai" name="sampai" value="{{.Sampai}}"></div>
+    <div class="col-auto"><label class="form-label small mb-0" for="per_page">Per halaman</label>
+      <select class="form-select form-select-sm" id="per_page" name="per_page">
+        <option value="10" {{if eq .Pagination.PerPage 10}}selected{{end}}>10</option>
+        <option value="25" {{if eq .Pagination.PerPage 25}}selected{{end}}>25</option>
+        <option value="50" {{if eq .Pagination.PerPage 50}}selected{{end}}>50</option>
+        <option value="100" {{if eq .Pagination.PerPage 100}}selected{{end}}>100</option>
+      </select>
+    </div>
+    <div class="col-auto"><button class="btn btn-primary btn-sm" type="submit">Filter</button> <a class="btn btn-outline-secondary btn-sm" href="?">Reset</a></div>
+  </div>
+</form>
 
 <div class="card">
   <div class="table-responsive">
@@ -25,7 +41,7 @@
       <tbody>
         {{range $i, $inv := .Invoices}}
         <tr>
-          <td>{{inc $i}}</td>
+          <td>{{addi $.Pagination.From $i}}</td>
           <td>{{dateID $inv.Tanggal}}</td>
           <td>{{$inv.NomorBukti}}</td>
           <td>{{$inv.Uraian}}</td>
@@ -35,11 +51,13 @@
             {{if eq $inv.JenisMenu 1}}Barang/Jasa{{else if eq $inv.JenisMenu 2}}Honor Narasumber{{else if eq $inv.JenisMenu 3}}Honor Peserta{{else if eq $inv.JenisMenu 4}}Transport{{else}}Uang Harian{{end}}
           </td>
           <td class="text-end">
-            <a class="btn btn-outline-primary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/tagihan/detail/{{$inv.ID}}" title="Detail"><i class="bi bi-eye"></i></a>
-            <a class="btn btn-outline-secondary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/tagihan/edit/{{$inv.ID}}" title="Edit"><i class="bi bi-pencil"></i></a>
+            <a class="btn btn-outline-primary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/tagihan/detail/{{$inv.ID}}" title="Detail" aria-label="Detail tagihan"><i class="bi bi-eye"></i></a>
+            {{if $.CanWrite}}
+            <a class="btn btn-outline-secondary btn-sm" href="/bantuan/{{$.Bantuan.ID}}/tagihan/edit/{{$inv.ID}}" title="Edit" aria-label="Edit tagihan"><i class="bi bi-pencil"></i></a>
             <form method="post" action="/bantuan/{{$.Bantuan.ID}}/tagihan/hapus/{{$inv.ID}}" class="d-inline" onsubmit="return confirm('Hapus tagihan ini? Entri BKU dan Bank terkait ikut dihapus.');">
-              <button class="btn btn-outline-danger btn-sm" title="Hapus"><i class="bi bi-trash"></i></button>
+              <button class="btn btn-outline-danger btn-sm" title="Hapus" aria-label="Hapus tagihan"><i class="bi bi-trash"></i></button>
             </form>
+            {{end}}
           </td>
         </tr>
         {{else}}
@@ -49,4 +67,5 @@
     </table>
   </div>
 </div>
+{{template "pagination" .Pagination}}
 {{end}}

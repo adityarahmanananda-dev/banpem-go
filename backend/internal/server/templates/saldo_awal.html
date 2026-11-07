@@ -4,7 +4,7 @@
   <a href="/bantuan/{{.Bantuan.ID}}/bku" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kembali</a>
 </div>
 
-<form method="post" class="card">
+{{if .CanWrite}}<form method="post" class="card">
   <div class="card-body">
     <div class="alert alert-info small mb-3">
       Saldo awal akan menjadi entri nomor 1 di Buku Kas Umum dan Buku Kas Bank dengan uraian "Saldo Awal".
@@ -24,4 +24,9 @@
     <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Simpan</button>
   </div>
 </form>
+{{else}}
+<div class="card"><div class="card-body">
+  <p class="mb-0">Saldo awal: <b>{{fmtMoney .Saldo}}</b> pada {{.Tanggal}}. Role viewer tidak dapat mengubah saldo awal.</p>
+</div></div>
+{{end}}
 {{end}}

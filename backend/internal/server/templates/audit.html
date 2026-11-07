@@ -1,0 +1,38 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="mb-0"><i class="bi bi-clock-history"></i> Audit Log</h4>
+  <span class="text-muted small">250 aktivitas terakhir</span>
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Waktu</th>
+          <th>User</th>
+          <th>Role</th>
+          <th>Aksi</th>
+          <th>Entitas</th>
+          <th>Bantuan</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .Rows}}
+        <tr>
+          <td class="text-nowrap">{{.CreatedAt.Format "02-01-2006 15:04:05"}}</td>
+          <td>{{if .Username}}{{.Username}}{{else}}<span class="text-muted">-</span>{{end}}</td>
+          <td>{{if .Role}}{{.Role}}{{else}}-{{end}}</td>
+          <td><span class="badge text-bg-primary">{{.Action}}</span></td>
+          <td>{{.Entity}}{{if .EntityID}} #{{.EntityID}}{{end}}</td>
+          <td>{{if .BantuanID}}{{.BantuanID}}{{else}}-{{end}}</td>
+          <td class="small text-break">{{range $k, $v := .Details}}<div><b>{{$k}}:</b> {{$v}}</div>{{end}}</td>
+        </tr>
+        {{else}}
+        <tr><td colspan="7" class="text-center text-muted">Belum ada audit log.</td></tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}

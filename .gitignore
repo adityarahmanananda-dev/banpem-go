@@ -13,6 +13,8 @@ backups/
 bin/
 dist/
 *.exe
+coverage.out
+*.test
 
 # OS / editor
 .DS_Store

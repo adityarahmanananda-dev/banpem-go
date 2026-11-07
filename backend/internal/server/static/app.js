@@ -1,6 +1,118 @@
 (function () {
   "use strict";
 
+  // ---- CSRF: inject hidden input ke semua form POST + header untuk fetch ----
+  var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  var CSRF_TOKEN = csrfMeta ? csrfMeta.getAttribute("content") : "";
+  window.CSRF_TOKEN = CSRF_TOKEN;
+  document.querySelectorAll("form").forEach(function (form) {
+    var method = (form.getAttribute("method") || "get").toLowerCase();
+    if (method !== "post") return;
+    if (form.querySelector('input[name="csrf_token"]')) return;
+    var input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "csrf_token";
+    input.value = CSRF_TOKEN;
+    form.appendChild(input);
+  });
+
+  function debounce(fn, wait) {
+    var t = null;
+    return function () {
+      var args = arguments, self = this;
+      clearTimeout(t);
+      t = setTimeout(function () { fn.apply(self, args); }, wait);
+    };
+  }
+
+  function escapeHTML(v) {
+    return String(v == null ? "" : v)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  // ---- Pihak ketiga: pilih pihak ketiga -> pilih rekening -> autofill ----
+  var PARTIES = window.PIHAK_KETIGA || [];
+  var partySelect = document.getElementById("pihakKetiga");
+  var rekeningSelect = document.getElementById("pihakKetigaRekening");
+  function findParty(id) {
+    for (var i = 0; i < PARTIES.length; i++) {
+      if (Number(PARTIES[i].ID) === Number(id)) return PARTIES[i];
+    }
+    return null;
+  }
+  function setInput(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.value = value || "";
+  }
+  function setReadonly(id, readonly) {
+    var el = document.getElementById(id);
+    if (el) el.readOnly = readonly;
+  }
+  function fillRekeningOptions(partyId, selectedId) {
+    if (!rekeningSelect) return;
+    rekeningSelect.innerHTML = '<option value="">— Pilih rekening —</option>';
+    var party = findParty(partyId);
+    if (!party || !party.Rekening) {
+      rekeningSelect.disabled = true;
+      return;
+    }
+    party.Rekening.forEach(function (r) {
+      var opt = document.createElement("option");
+      opt.value = r.ID;
+      opt.textContent = [r.Bank, r.NomorRekening, r.NamaRekening].filter(Boolean).join(" — ") || ("Rekening #" + r.ID);
+      if (selectedId && Number(selectedId) === Number(r.ID)) opt.selected = true;
+      rekeningSelect.appendChild(opt);
+    });
+    rekeningSelect.disabled = party.Rekening.length === 0;
+  }
+  function applyRekening(clearManual) {
+    var party = findParty(partySelect ? partySelect.value : "");
+    var rekID = rekeningSelect ? rekeningSelect.value : "";
+    var rek = null;
+    if (party && party.Rekening) {
+      for (var i = 0; i < party.Rekening.length; i++) {
+        if (Number(party.Rekening[i].ID) === Number(rekID)) { rek = party.Rekening[i]; break; }
+      }
+    }
+    if (rek) {
+      setInput("namaRekening", rek.NamaRekening);
+      setInput("bank", rek.Bank);
+      setInput("nomorRekening", rek.NomorRekening);
+    }
+    if (party) {
+      setInput("npwp", party.NPWP);
+    } else {
+      setInput("npwp", "");
+      if (!rek && clearManual) {
+        setInput("namaRekening", "");
+        setInput("bank", "");
+        setInput("nomorRekening", "");
+      }
+    }
+    var locked = !!rek;
+    ["namaRekening", "bank", "nomorRekening", "npwp"].forEach(function (id) {
+      setReadonly(id, locked);
+    });
+  }
+  if (partySelect) {
+    fillRekeningOptions(partySelect.value, window.SELECTED_REKENING_ID);
+    applyRekening(false);
+    partySelect.addEventListener("change", function () {
+      var party = findParty(partySelect.value);
+      var first = party && party.Rekening && party.Rekening.length ? party.Rekening[0].ID : "";
+      fillRekeningOptions(partySelect.value, first);
+      if (first) rekeningSelect.value = String(first);
+      applyRekening(true);
+    });
+    if (rekeningSelect) {
+      rekeningSelect.addEventListener("change", function () { applyRekening(true); });
+    }
+  }
+
   // ---- Format uang (ribuan titik) pada input .money-input ----
   function digitsOnly(v) {
     return (v || "").replace(/[^0-9]/g, "");
@@ -41,7 +153,7 @@
         // Bawa pilihan kolom tambahan halaman (mis. rekap penggunaan dana)
         // sebagai hidden input agar ikut dikirim saat export.
         var params = new URLSearchParams(window.location.search);
-        ["kegiatan", "sub_kegiatan", "aktivitas", "komponen", "pajak", "tanggal", "bruto", "potongan", "setelah_pajak", "biaya_admin", "ditransfer"].forEach(function (name) {
+        ["kegiatan", "sub_kegiatan", "aktivitas", "komponen", "pajak", "tanggal", "dari", "sampai", "bruto", "potongan", "setelah_pajak", "biaya_admin", "ditransfer"].forEach(function (name) {
           var v = params.get(name);
           if (v) {
             var input = document.createElement("input");
@@ -92,7 +204,7 @@
     });
     fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": CSRF_TOKEN },
       body: JSON.stringify({ order: order })
     }).then(function (resp) {
       if (!resp.ok) {
@@ -258,9 +370,10 @@
       "jenisMenu", "bruto", "bank", "jenisBiayaAdmin", "tarifPph"
     ].map(function (id) { return document.getElementById(id); }).filter(Boolean);
     pajakTriggers.push.apply(pajakTriggers, document.querySelectorAll(".flag-ppn, .flag-pph, select[name=kategori_narasumber]"));
+    var hitungPajakDebounced = debounce(hitungPajak, 200);
     pajakTriggers.forEach(function (el) {
       el.addEventListener("change", hitungPajak);
-      el.addEventListener("input", hitungPajak);
+      el.addEventListener("input", hitungPajakDebounced);
     });
     var bankInput = document.getElementById("bank");
     if (bankInput) {
@@ -329,7 +442,7 @@
     var opts = '<option value="">Pilih</option>';
     arr.forEach(function (m) {
       var sel = selected && Number(selected) === Number(m.ID) ? " selected" : "";
-      opts += '<option value="' + m.ID + '"' + sel + ">" + m.Nama + "</option>";
+      opts += '<option value="' + escapeHTML(m.ID) + '"' + sel + ">" + escapeHTML(m.Nama) + "</option>";
     });
     return opts;
   }
@@ -451,14 +564,14 @@
     rowsContainer.querySelectorAll(".realisasi-row").forEach(initRealisasiRow);
     document.getElementById("tambahRealisasi").addEventListener("click", function () {
       var tpl = document.createElement("div");
-      tpl.className = "realisasi-row row g-2 mb-2";
+      tpl.className = "realisasi-row border rounded p-3 mb-3";
       tpl.innerHTML =
-        '<div class="col-12 col-md-2"><select class="form-select form-select-sm r-kegiatan"></select></div>' +
-        '<div class="col-12 col-md-2"><select class="form-select form-select-sm r-sub"></select></div>' +
-        '<div class="col-12 col-md-2"><select class="form-select form-select-sm r-aktivitas"></select></div>' +
-        '<div class="col-12 col-md-2"><select class="form-select form-select-sm r-komponen" name="komponen_id"></select></div>' +
-        '<div class="col-6 col-md-2"><input type="text" class="form-control form-control-sm money-input r-bruto" name="bruto"></div>' +
-        '<div class="col-6 col-md-2 d-flex align-items-center"><button type="button" class="btn btn-outline-danger btn-sm r-hapus"><i class="bi bi-x-lg"></i></button></div>';
+        '<div class="row mb-2"><label class="col-sm-3 col-form-label">Kegiatan</label><div class="col-sm-9"><select class="form-select form-select-sm r-kegiatan"></select></div></div>' +
+        '<div class="row mb-2"><label class="col-sm-3 col-form-label">Sub Kegiatan</label><div class="col-sm-9"><select class="form-select form-select-sm r-sub"></select></div></div>' +
+        '<div class="row mb-2"><label class="col-sm-3 col-form-label">Aktivitas</label><div class="col-sm-9"><select class="form-select form-select-sm r-aktivitas"></select></div></div>' +
+        '<div class="row mb-2"><label class="col-sm-3 col-form-label">Komponen</label><div class="col-sm-9"><select class="form-select form-select-sm r-komponen" name="komponen_id"></select></div></div>' +
+        '<div class="row mb-2"><label class="col-sm-3 col-form-label">Bruto Realisasi</label><div class="col-sm-9"><input type="text" class="form-control form-control-sm money-input r-bruto" name="bruto"></div></div>' +
+        '<div class="text-end"><button type="button" class="btn btn-outline-danger btn-sm r-hapus"><i class="bi bi-trash"></i> Hapus Baris</button></div>';
       rowsContainer.appendChild(tpl);
       var inp = tpl.querySelector(".money-input");
       inp.addEventListener("input", function () {

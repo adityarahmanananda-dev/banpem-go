@@ -16,8 +16,11 @@
   <div class="card-body py-2">
     <form method="get" class="d-flex flex-wrap align-items-center gap-2 mb-0">
       <span class="text-muted small fw-bold">Tanggal Tagihan:</span>
-      <input type="date" class="form-control form-control-sm" style="width:auto" name="tanggal" value="{{.SelTanggal}}" onchange="this.form.submit()">
-      {{if .SelTanggal}}<a href="/bantuan/{{.Bantuan.ID}}/rekap-belanja" class="btn btn-sm btn-outline-secondary">Reset Tanggal</a>{{end}}
+      <input type="date" class="form-control form-control-sm" style="width:auto" name="dari" value="{{.Dari}}" aria-label="Dari tanggal">
+      <span class="text-muted small">s/d</span>
+      <input type="date" class="form-control form-control-sm" style="width:auto" name="sampai" value="{{.Sampai}}" aria-label="Sampai tanggal">
+      <button class="btn btn-sm btn-outline-primary" type="submit">Terapkan</button>
+      {{if or .Dari .Sampai .SelTanggal}}<a href="/bantuan/{{.Bantuan.ID}}/rekap-belanja" class="btn btn-sm btn-outline-secondary">Reset Tanggal</a>{{end}}
       <span class="text-muted small fw-bold ms-3">Kolom:</span>
       <div class="form-check form-check-inline mb-0">
         <input class="form-check-input" type="checkbox" name="kegiatan" value="1" id="kolKegiatan" {{if .SelKegiatan}}checked{{end}} onchange="this.form.submit()">
@@ -73,7 +76,7 @@
       <tbody>
         {{range $i, $r := .Rows}}
         <tr>
-          <td>{{inc $i}}</td>
+          <td>{{addi $.Pagination.From $i}}</td>
           <td class="text-nowrap">{{dateID $r.Tanggal}}</td>
           {{if $.SelKegiatan}}<td style="white-space:pre-line"><b>KEGIATAN:</b> {{$r.Kegiatan}}
 
@@ -107,4 +110,5 @@ NPWP: {{formatNPWP $r.NPWP}}</td>
     </table>
   </div>
 </div>
+{{template "pagination" .Pagination}}
 {{end}}

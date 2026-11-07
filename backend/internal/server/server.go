@@ -2,15 +2,22 @@
 package server
 
 import (
+	"bytes"
+	"context"
 	"embed"
+	"errors"
 	"html/template"
 	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
+	"ebku/internal/money"
 	"ebku/internal/store"
 )
 
@@ -21,9 +28,17 @@ var templatesFS embed.FS
 var staticFS embed.FS
 
 type Server struct {
-	Store     *store.Store
-	Tpls      map[string]*template.Template
-	BackupDir string
+	Store           *store.Store
+	Tpls            map[string]*template.Template
+	BackupDir       string
+	SessionTTL      time.Duration
+	CookieSecure    bool
+	ReportCity      string
+	AlertWebhookURL string
+	loginLimiter    *loginLimiter
+	metrics         *appMetrics
+	alertMu         sync.Mutex
+	lastAlert       map[string]time.Time
 }
 
 func New(st *store.Store, backupDir string) (*Server, error) {
@@ -43,7 +58,13 @@ func New(st *store.Store, backupDir string) (*Server, error) {
 		}
 		tpls[name] = t
 	}
-	return &Server{Store: st, Tpls: tpls, BackupDir: backupDir}, nil
+	return &Server{
+		Store: st, Tpls: tpls, BackupDir: backupDir,
+		SessionTTL: 12 * time.Hour, ReportCity: "Jakarta",
+		loginLimiter: newLoginLimiter(),
+		metrics:      newAppMetrics(),
+		lastAlert:    map[string]time.Time{},
+	}, nil
 }
 
 // Router membangun seluruh rute aplikasi.
@@ -56,12 +77,44 @@ func (s *Server) Router() http.Handler {
 	}
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("ok"))
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := s.Store.Ping(ctx); err != nil {
+			s.alert("database_down", "health check database gagal: "+err.Error(), r)
+			http.Error(w, "database tidak siap", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = w.Write([]byte("ok"))
 	})
 
+	mux.HandleFunc("GET /login", s.handleLoginGet)
+	mux.HandleFunc("POST /login", s.handleLoginPost)
+	mux.HandleFunc("POST /logout", s.handleLogout)
+
+	mux.HandleFunc("GET /admin/users", s.requireAdmin(s.handleUsersGet))
+	mux.HandleFunc("POST /admin/users", s.requireAdmin(s.handleUserCreate))
+	mux.HandleFunc("POST /admin/users/{id}/toggle", s.requireAdmin(s.handleUserToggle))
+	mux.HandleFunc("POST /admin/users/{id}/password", s.requireAdmin(s.handleUserPassword))
+	mux.HandleFunc("GET /admin/audit", s.requireAdmin(s.handleAudit))
+	mux.HandleFunc("GET /admin/errors", s.requireAdmin(s.handleErrors))
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
+
 	mux.HandleFunc("GET /", s.handleDashboard)
-	mux.HandleFunc("GET /export-database", s.handleExportDB)
-	mux.HandleFunc("POST /import-database", s.handleImportDB)
+	mux.HandleFunc("GET /search", s.handleSearch)
+	mux.HandleFunc("GET /export-database", s.requireAdmin(s.handleExportDB))
+	mux.HandleFunc("POST /import-database", s.requireAdmin(s.handleImportDB))
+
+	mux.HandleFunc("GET /pihak-ketiga", s.handlePihakKetigaList)
+	mux.HandleFunc("GET /pihak-ketiga/tambah", s.handlePihakKetigaCreateGet)
+	mux.HandleFunc("POST /pihak-ketiga/tambah", s.handlePihakKetigaCreatePost)
+	mux.HandleFunc("GET /pihak-ketiga/{id}", s.handlePihakKetigaDetail)
+	mux.HandleFunc("GET /pihak-ketiga/{id}/edit", s.handlePihakKetigaEditGet)
+	mux.HandleFunc("POST /pihak-ketiga/{id}/edit", s.handlePihakKetigaEditPost)
+	mux.HandleFunc("POST /pihak-ketiga/{id}/hapus", s.handlePihakKetigaDelete)
+	mux.HandleFunc("POST /pihak-ketiga/{id}/rekening/tambah", s.handlePihakKetigaRekeningAdd)
+	mux.HandleFunc("POST /pihak-ketiga/{id}/rekening/{rid}/edit", s.handlePihakKetigaRekeningEdit)
+	mux.HandleFunc("POST /pihak-ketiga/{id}/rekening/{rid}/hapus", s.handlePihakKetigaRekeningDelete)
 
 	mux.HandleFunc("GET /bantuan/tambah", s.handleBantuanTambahGet)
 	mux.HandleFunc("POST /bantuan/tambah", s.handleBantuanTambahPost)
@@ -164,19 +217,15 @@ func (s *Server) Router() http.Handler {
 	mux.HandleFunc("GET /api/bantuan/{id}/komponen", s.handleAPIKomponen)
 	mux.HandleFunc("GET /api/bantuan/{id}/hitung-pajak", s.handleAPIHitungPajak)
 
-	return withRecovery(mux)
-}
-
-func withRecovery(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if rec := recover(); rec != nil {
-				log.Printf("panic: %v", rec)
-				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			}
-		}()
-		next.ServeHTTP(w, r)
-	})
+	var h http.Handler = mux
+	h = s.withRequestLog(h)
+	h = s.withAuth(h)
+	h = s.withCSRF(h)
+	h = s.withMetrics(h)
+	h = s.withRequestID(h)
+	h = s.withBodyLimit(h)
+	h = s.withSecurityHeaders(h)
+	return s.withRecovery(h)
 }
 
 // ---- helpers ----
@@ -239,20 +288,87 @@ func (s *Server) redirect(w http.ResponseWriter, r *http.Request, url string) {
 }
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	t, ok := s.Tpls[name]
 	if !ok {
 		log.Printf("render %s: template tidak ditemukan", name)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	if err := t.ExecuteTemplate(w, "base", data); err != nil {
-		log.Printf("render %s: %v", name, err)
+	data = injectBaseFields(data, userFromContext(r.Context()), csrfFromContext(r.Context()), r.URL.Query().Get("q"))
+	var buf bytes.Buffer
+	if err := t.ExecuteTemplate(&buf, "base", data); err != nil {
+		log.Printf("render %s request_id=%s: %v", name, requestIDFromContext(r.Context()), err)
+		s.recordError(r, "render "+name+": "+err.Error(), "")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = buf.WriteTo(w)
+}
+
+// injectBaseFields mengisi User/CSRF pada baseView yang di-embed oleh semua
+// struct data halaman. Reflection dipakai agar tidak perlu mengubah puluhan
+// literal baseView di setiap handler.
+func injectBaseFields(data any, u *store.User, csrf, searchQuery string) any {
+	if data == nil {
+		return data
+	}
+	v := reflect.ValueOf(data)
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return data
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return data
+	}
+	// Handler umumnya mengirim struct by value. Buat salinan addressable agar
+	// field promoted dari baseView bisa diisi tanpa mengubah semua handler.
+	out := reflect.New(v.Type()).Elem()
+	out.Set(v)
+	if f := out.FieldByName("User"); f.IsValid() && f.CanSet() {
+		f.Set(reflect.ValueOf(u))
+	}
+	if f := out.FieldByName("CSRF"); f.IsValid() && f.CanSet() {
+		f.SetString(csrf)
+	}
+	if f := out.FieldByName("SearchQuery"); f.IsValid() && f.CanSet() {
+		f.SetString(searchQuery)
+	}
+	return out.Interface()
 }
 
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error, url string) {
-	log.Printf("error: %v", err)
-	s.setFlash(w, "danger", "Terjadi kesalahan. Silakan coba lagi.")
+	log.Printf("error request_id=%s: %v", requestIDFromContext(r.Context()), err)
+	if !isExpectedError(err) {
+		s.recordError(r, err.Error(), "")
+	}
+	msg := "Terjadi kesalahan. Silakan coba lagi."
+	switch {
+	case errors.Is(err, store.ErrInUse):
+		msg = "Data tidak bisa dihapus karena masih dipakai transaksi."
+	case errors.Is(err, store.ErrInvoiceHasTaxDeposit):
+		msg = "Tagihan sudah memiliki setoran pajak. Hapus/edit setoran pajak terlebih dahulu."
+	case errors.Is(err, store.ErrTaxAlreadyDeposited):
+		msg = "Pajak tagihan tersebut sudah disetor."
+	case errors.Is(err, store.ErrRealisasiMismatch):
+		msg = "Total realisasi harus sama dengan bruto tagihan."
+	case errors.Is(err, store.ErrBudgetExceeded):
+		msg = "Realisasi/pagu melebihi batas komponen."
+	case errors.Is(err, store.ErrDuplicateInvoiceNo):
+		msg = "Nomor bukti tagihan sudah dipakai."
+	case errors.Is(err, store.ErrPencairanExceedsTotal):
+		msg = "Total pencairan melebihi nominal bantuan."
+	case errors.Is(err, store.ErrInvalidInput), errors.Is(err, store.ErrNotFound):
+		msg = "Input/data tidak valid."
+	case errors.Is(err, store.ErrInvalidDate):
+		msg = "Tanggal tidak valid."
+	case errors.Is(err, money.ErrInvalidAmount), errors.Is(err, money.ErrNegativeAmount),
+		errors.Is(err, money.ErrZeroAmount):
+		msg = "Nominal tidak valid atau harus lebih dari 0."
+	}
+	s.setFlash(w, "danger", msg)
 	s.redirect(w, r, url)
 }
 

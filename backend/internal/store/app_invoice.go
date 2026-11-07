@@ -58,24 +58,26 @@ type RealisasiInput struct {
 }
 
 type InvoiceInput struct {
-	Tanggal              time.Time
-	NomorBukti           string
-	Uraian               string
-	Bruto                int64
-	JenisMenu            int
-	FlagPpn              int
-	FlagPph              int
-	KategoriNarasumber   *int
-	TarifPPH             float64
-	NamaRekening         string
-	NomorRekening        string
-	Bank                 string
-	NPWP                 string
-	NomorBupotPPN        string
-	NomorBupotPPH        string
-	BiayaAdminDibebankan string
-	JenisBiayaAdmin      string
-	Realisasi            []RealisasiInput
+	Tanggal               time.Time
+	NomorBukti            string
+	Uraian                string
+	Bruto                 int64
+	JenisMenu             int
+	FlagPpn               int
+	FlagPph               int
+	KategoriNarasumber    *int
+	TarifPPH              float64
+	NamaRekening          string
+	NomorRekening         string
+	Bank                  string
+	NPWP                  string
+	NomorBupotPPN         string
+	NomorBupotPPH         string
+	BiayaAdminDibebankan  string
+	JenisBiayaAdmin       string
+	PihakKetigaID         *int64
+	PihakKetigaRekeningID *int64
+	Realisasi             []RealisasiInput
 	// PPNOverride/PPHOverride membiarkan user mengoreksi hasil perhitungan
 	// pajak (mis. selisih pembulatan). Nilai pointer bila diisi dipakai
 	// menggantikan nilai PPN/PPh hasil hitung_pajak.
@@ -111,33 +113,72 @@ func getInvoiceQ(ctx context.Context, q Querier, id int64) (Invoice, error) {
 	err := q.QueryRow(ctx, `SELECT id, bantuan_id, tanggal, nomor_bukti, uraian, bruto,
 		jenis_menu, flag_ppn, flag_pph, kategori_narasumber, tarif_pph, dpp, dpp_nilai_lain,
 		nilai_ppn, nilai_pph, jenis_pph, nilai_netto, nama_rekening, nomor_rekening,
-		bank, npwp, nomor_bupot_ppn, nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order
+		bank, npwp, nomor_bupot_ppn, nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order,
+		pihak_ketiga_id, pihak_ketiga_rekening_id
 		FROM trx_invoice WHERE id=$1`, id).Scan(
 		&i.ID, &i.BantuanID, &i.Tanggal, &i.NomorBukti, &i.Uraian, &i.Bruto,
 		&i.JenisMenu, &i.FlagPpn, &i.FlagPph, &i.KategoriNarasumber, &i.TarifPPH, &i.DPP, &i.DPPNilaiLain,
 		&i.NilaiPPN, &i.NilaiPPH, &i.JenisPPH, &i.NilaiNetto, &i.NamaRekening, &i.NomorRekening,
 		&i.Bank, &i.NPWP, &i.NomorBupotPPN, &i.NomorBupotPPH, &i.BiayaAdminDibebankan,
-		&i.JenisBiayaAdmin, &i.SortOrder)
+		&i.JenisBiayaAdmin, &i.SortOrder, &i.PihakKetigaID, &i.PihakKetigaRekeningID)
 	return i, err
 }
 
-func saveRealisasi(ctx context.Context, q Querier, iid int64, rows []RealisasiInput, ppnTotal, pphTotal int64) error {
+func saveRealisasi(ctx context.Context, q Querier, bantuanID, iid int64, rows []RealisasiInput, ppnTotal, pphTotal, bruto int64) error {
+	var valid []RealisasiInput
 	var total int64
 	for _, r := range rows {
 		if r.KomponenID <= 0 {
 			continue
 		}
+		if r.Bruto <= 0 {
+			return ErrInvalidInput
+		}
+		ok, err := komponenBelongsToBantuan(ctx, q, bantuanID, r.KomponenID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return ErrInvalidInput
+		}
+		var pagu int64
+		if err := q.QueryRow(ctx, `SELECT pagu FROM komponen WHERE id=$1`, r.KomponenID).Scan(&pagu); err != nil {
+			return err
+		}
+		if pagu > 0 {
+			var used int64
+			if err := q.QueryRow(ctx, `SELECT COALESCE(SUM(r.bruto),0)
+				FROM trx_invoice_realisasi r
+				JOIN trx_invoice i ON i.id=r.invoice_id
+				WHERE r.komponen_id=$1 AND i.bantuan_id=$2 AND i.id<>$3`,
+				r.KomponenID, bantuanID, iid).Scan(&used); err != nil {
+				return err
+			}
+			if used+r.Bruto > pagu {
+				return ErrBudgetExceeded
+			}
+		}
+		valid = append(valid, r)
 		total += r.Bruto
 	}
 	if total <= 0 {
 		return nil
 	}
-	for _, r := range rows {
-		if r.KomponenID <= 0 {
-			continue
-		}
+	if bruto != total {
+		return ErrRealisasiMismatch
+	}
+	var allocatedPPN, allocatedPPH int64
+	for i, r := range valid {
 		rPPN := money.MulDiv(ppnTotal, r.Bruto, total)
 		rPPH := money.MulDiv(pphTotal, r.Bruto, total)
+		if i == len(valid)-1 {
+			// Distribusikan sisa pembulatan ke baris terakhir agar total
+			// realisasi pajak selalu sama dengan total invoice.
+			rPPN = ppnTotal - allocatedPPN
+			rPPH = pphTotal - allocatedPPH
+		}
+		allocatedPPN += rPPN
+		allocatedPPH += rPPH
 		rNetto := r.Bruto - rPPN - rPPH
 		if _, err := q.Exec(ctx, `INSERT INTO trx_invoice_realisasi
 			(invoice_id, komponen_id, bruto, nilai_ppn, nilai_pph, nilai_netto)
@@ -148,13 +189,63 @@ func saveRealisasi(ctx context.Context, q Querier, iid int64, rows []RealisasiIn
 	return nil
 }
 
+func komponenBelongsToBantuan(ctx context.Context, q Querier, bantuanID, komponenID int64) (bool, error) {
+	var ok bool
+	err := q.QueryRow(ctx, `SELECT EXISTS(
+		SELECT 1 FROM komponen ko
+		JOIN aktivitas a ON a.id=ko.aktivitas_id
+		JOIN sub_kegiatan sk ON sk.id=a.sub_kegiatan_id
+		JOIN kegiatan k ON k.id=sk.kegiatan_id
+		WHERE ko.id=$1 AND k.bantuan_id=$2)`, komponenID, bantuanID).Scan(&ok)
+	return ok, err
+}
+
+func checkDuplicateInvoiceNo(ctx context.Context, q Querier, bantuanID int64, nomor string, excludeID int64) error {
+	nomor = strings.TrimSpace(nomor)
+	if nomor == "" {
+		return nil
+	}
+	var exists bool
+	if err := q.QueryRow(ctx, `SELECT EXISTS(
+		SELECT 1 FROM trx_invoice WHERE bantuan_id=$1 AND nomor_bukti=$2 AND id<>$3)`,
+		bantuanID, nomor, excludeID).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return ErrDuplicateInvoiceNo
+	}
+	return nil
+}
+
+func checkInvoiceHasTaxDeposit(ctx context.Context, q Querier, invoiceID int64) error {
+	var exists bool
+	if err := q.QueryRow(ctx, `SELECT EXISTS(
+		SELECT 1 FROM rekap_pajak WHERE invoice_id=$1 AND setor_ledger_id IS NOT NULL)`,
+		invoiceID).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return ErrInvoiceHasTaxDeposit
+	}
+	return nil
+}
+
 // CreateInvoice membuat tagihan baru lengkap dengan entri BKU + Bank dan
 // realisasi, semuanya dalam satu transaksi.
 func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceInput) (int64, error) {
 	var iid int64
-	err := s.WithTx(ctx, func(tx Tx) error {
+	err := s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
+		if in.Bruto <= 0 || in.Tanggal.IsZero() {
+			return ErrInvalidInput
+		}
 		b, err := getBantuanQ(ctx, tx, bantuanID)
 		if err != nil {
+			return err
+		}
+		if err := checkDuplicateInvoiceNo(ctx, tx, bantuanID, in.NomorBukti, 0); err != nil {
+			return err
+		}
+		if err := resolvePihakKetiga(ctx, tx, &in); err != nil {
 			return err
 		}
 		res := tax.Hitung(in.Bruto, in.JenisMenu, in.FlagPpn, in.FlagPph, in.KategoriNarasumber, in.TarifPPH)
@@ -180,18 +271,19 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 			(bantuan_id, tanggal, nomor_bukti, uraian, bruto, jenis_menu, flag_ppn, flag_pph,
 			 kategori_narasumber, dpp, dpp_nilai_lain, nilai_ppn, nilai_pph, jenis_pph,
 			 nilai_netto, nama_rekening, nomor_rekening, bank, npwp, nomor_bupot_ppn,
-			 nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order, tarif_pph)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+			 nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order, tarif_pph,
+			 pihak_ketiga_id, pihak_ketiga_rekening_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
 			RETURNING id`,
 			bantuanID, in.Tanggal, in.NomorBukti, in.Uraian, in.Bruto, in.JenisMenu,
 			in.FlagPpn, in.FlagPph, in.KategoriNarasumber, res.DPP, res.DPPNilaiLain,
 			ppn, pph, jenisPPH, nettoFinal, in.NamaRekening, in.NomorRekening,
 			in.Bank, in.NPWP, in.NomorBupotPPN, in.NomorBupotPPH, in.BiayaAdminDibebankan,
-			jenisAdmin, sortOrder, in.TarifPPH).Scan(&iid)
+			jenisAdmin, sortOrder, in.TarifPPH, in.PihakKetigaID, in.PihakKetigaRekeningID).Scan(&iid)
 		if err != nil {
 			return err
 		}
-		if err := saveRealisasi(ctx, tx, iid, in.Realisasi, ppn, pph); err != nil {
+		if err := saveRealisasi(ctx, tx, bantuanID, iid, in.Realisasi, ppn, pph, in.Bruto); err != nil {
 			return err
 		}
 		iidPtr := iid
@@ -252,10 +344,25 @@ func (s *Store) CreateInvoice(ctx context.Context, bantuanID int64, in InvoiceIn
 
 // UpdateInvoice = hapus entri lama lalu buat ulang dari nominal terbaru.
 // Tidak ada jurnal koreksi.
-func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) error {
-	return s.WithTx(ctx, func(tx Tx) error {
+func (s *Store) UpdateInvoice(ctx context.Context, bantuanID, iid int64, in InvoiceInput) error {
+	return s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
+		if in.Bruto <= 0 || in.Tanggal.IsZero() {
+			return ErrInvalidInput
+		}
 		inv, err := getInvoiceQ(ctx, tx, iid)
 		if err != nil {
+			return err
+		}
+		if inv.BantuanID != bantuanID {
+			return ErrNotFound
+		}
+		if err := checkInvoiceHasTaxDeposit(ctx, tx, iid); err != nil {
+			return err
+		}
+		if err := checkDuplicateInvoiceNo(ctx, tx, bantuanID, in.NomorBukti, iid); err != nil {
+			return err
+		}
+		if err := resolvePihakKetiga(ctx, tx, &in); err != nil {
 			return err
 		}
 		b, err := getBantuanQ(ctx, tx, inv.BantuanID)
@@ -292,16 +399,16 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 			flag_pph=$7, kategori_narasumber=$8, dpp=$9, dpp_nilai_lain=$10, nilai_ppn=$11,
 			nilai_pph=$12, jenis_pph=$13, nilai_netto=$14, nama_rekening=$15, nomor_rekening=$16,
 			bank=$17, npwp=$18, nomor_bupot_ppn=$19, nomor_bupot_pph=$20, biaya_admin_dibebankan=$21,
-			jenis_biaya_admin=$22, tarif_pph=$23
-			WHERE id=$24`,
+			jenis_biaya_admin=$22, tarif_pph=$23, pihak_ketiga_id=$24, pihak_ketiga_rekening_id=$25
+			WHERE id=$26`,
 			in.Tanggal, in.NomorBukti, in.Uraian, in.Bruto, in.JenisMenu, in.FlagPpn,
 			in.FlagPph, in.KategoriNarasumber, res.DPP, res.DPPNilaiLain, ppn,
 			pph, jenisPPH, nettoFinal, in.NamaRekening, in.NomorRekening,
 			in.Bank, in.NPWP, in.NomorBupotPPN, in.NomorBupotPPH, in.BiayaAdminDibebankan,
-			jenisAdmin, in.TarifPPH, iid); err != nil {
+			jenisAdmin, in.TarifPPH, in.PihakKetigaID, in.PihakKetigaRekeningID, iid); err != nil {
 			return err
 		}
-		if err := saveRealisasi(ctx, tx, iid, in.Realisasi, ppn, pph); err != nil {
+		if err := saveRealisasi(ctx, tx, bantuanID, iid, in.Realisasi, ppn, pph, in.Bruto); err != nil {
 			return err
 		}
 		iidPtr := iid
@@ -357,10 +464,16 @@ func (s *Store) UpdateInvoice(ctx context.Context, iid int64, in InvoiceInput) e
 
 // DeleteInvoice menghapus tagihan beserta entri ledger, realisasi, dan rekap
 // pajak terkait, lalu menyusun ulang nomor & saldo.
-func (s *Store) DeleteInvoice(ctx context.Context, iid int64) error {
-	return s.WithTx(ctx, func(tx Tx) error {
+func (s *Store) DeleteInvoice(ctx context.Context, bantuanID, iid int64) error {
+	return s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
 		inv, err := getInvoiceQ(ctx, tx, iid)
 		if err != nil {
+			return err
+		}
+		if inv.BantuanID != bantuanID {
+			return ErrNotFound
+		}
+		if err := checkInvoiceHasTaxDeposit(ctx, tx, iid); err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `DELETE FROM trx_ledger WHERE invoice_id=$1`, iid); err != nil {
@@ -404,7 +517,8 @@ func (s *Store) ListInvoices(ctx context.Context, bantuanID int64, order string)
 	rows, err := s.Pool.Query(ctx, `SELECT id, bantuan_id, tanggal, nomor_bukti, uraian, bruto,
 		jenis_menu, flag_ppn, flag_pph, kategori_narasumber, tarif_pph, dpp, dpp_nilai_lain,
 		nilai_ppn, nilai_pph, jenis_pph, nilai_netto, nama_rekening, nomor_rekening,
-		bank, npwp, nomor_bupot_ppn, nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order
+		bank, npwp, nomor_bupot_ppn, nomor_bupot_pph, biaya_admin_dibebankan, jenis_biaya_admin, sort_order,
+		pihak_ketiga_id, pihak_ketiga_rekening_id
 		FROM trx_invoice WHERE bantuan_id=$1 `+sqlOrder, bantuanID)
 	if err != nil {
 		return nil, err
@@ -417,7 +531,7 @@ func (s *Store) ListInvoices(ctx context.Context, bantuanID int64, order string)
 			&i.JenisMenu, &i.FlagPpn, &i.FlagPph, &i.KategoriNarasumber, &i.TarifPPH, &i.DPP, &i.DPPNilaiLain,
 			&i.NilaiPPN, &i.NilaiPPH, &i.JenisPPH, &i.NilaiNetto, &i.NamaRekening, &i.NomorRekening,
 			&i.Bank, &i.NPWP, &i.NomorBupotPPN, &i.NomorBupotPPH, &i.BiayaAdminDibebankan,
-			&i.JenisBiayaAdmin, &i.SortOrder); err != nil {
+			&i.JenisBiayaAdmin, &i.SortOrder, &i.PihakKetigaID, &i.PihakKetigaRekeningID); err != nil {
 			return nil, err
 		}
 		out = append(out, i)

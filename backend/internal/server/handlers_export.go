@@ -202,9 +202,14 @@ func (s *Server) rekapBelanjaExport(w http.ResponseWriter, r *http.Request, kind
 		return
 	}
 	tgl, _, _ := exportParams(r)
-	filtTanggal := parseFilterTanggal(r)
+	from, to := dateRangeFromQuery(r)
+	if from == nil && to == nil {
+		if t := parseFilterTanggal(r); t != nil {
+			from, to = t, t
+		}
+	}
 	colOpts := rekapBelanjaColOptsFromQuery(r.URL.Query())
-	rep, err := s.buildRekapBelanja(r.Context(), &b, tgl, filtTanggal, colOpts)
+	rep, err := s.buildRekapBelanjaRange(r.Context(), &b, tgl, from, to, colOpts)
 	if err != nil {
 		s.fail(w, r, err, "/")
 		return

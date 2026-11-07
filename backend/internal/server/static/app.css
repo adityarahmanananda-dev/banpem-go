@@ -38,3 +38,46 @@ tr.no-drag {
 .money-input {
   text-align: right;
 }
+
+.chart-bars {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+  height: 220px;
+  padding-top: 0.5rem;
+}
+
+.chart-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+}
+
+.chart-bar {
+  width: 100%;
+  max-width: 44px;
+  max-height: 180px;
+  min-height: 2px;
+  background: linear-gradient(180deg, #0d6efd, #6ea8fe);
+  border-radius: 4px 4px 0 0;
+}
+
+.chart-value {
+  font-size: 0.62rem;
+  color: #6c757d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.chart-label {
+  font-size: 0.62rem;
+  color: #6c757d;
+  margin-top: 0.25rem;
+  white-space: nowrap;
+}
