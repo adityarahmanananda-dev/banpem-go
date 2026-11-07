@@ -72,18 +72,13 @@
         <li class="nav-item"><a class="nav-link" href="/bantuan/{{.Bantuan.ID}}/jasa-giro"><i class="bi bi-piggy-bank"></i> Jasa Giro</a></li>
 
         <li class="nav-item mt-2"><div class="text-uppercase text-muted fw-bold small">Laporan</div></li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown" role="button"><i class="bi bi-files"></i> Laporan</a>
-          <ul class="dropdown-menu shadow">
-            <li><a class="dropdown-item {{if eq .Active "bku"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/bku">Buku Kas Umum</a></li>
-            <li><a class="dropdown-item {{if eq .Active "bank"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/bank">Buku Kas Bank</a></li>
-            <li><a class="dropdown-item {{if eq .Active "rekap-pajak"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/rekap-pajak">Rekap Pajak</a></li>
-            <li><a class="dropdown-item {{if eq .Active "rekap-penggunaan-dana"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/rekap-penggunaan-dana">Rekap Penggunaan Dana</a></li>
-            <li><a class="dropdown-item {{if eq .Active "bap-kas"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/bap-kas">BA Pemeriksaan Kas</a></li>
-            <li><a class="dropdown-item {{if eq .Active "rekap-belanja"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/rekap-belanja">Rekap Belanja</a></li>
-            <li><a class="dropdown-item {{if eq .Active "rekap-realisasi"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/rekap-realisasi">Rekap Realisasi</a></li>
-          </ul>
-        </li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "bku"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/bku"><i class="bi bi-journal-text"></i> Buku Kas Umum</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "bank"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/bank"><i class="bi bi-bank"></i> Buku Kas Bank</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "rekap-pajak"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/rekap-pajak"><i class="bi bi-pie-chart"></i> Rekap Pajak</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "rekap-penggunaan-dana"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/rekap-penggunaan-dana"><i class="bi bi-cash-stack"></i> Rekap Penggunaan Dana</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "bap-kas"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/bap-kas"><i class="bi bi-clipboard-check"></i> BA Pemeriksaan Kas</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "rekap-belanja"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/rekap-belanja"><i class="bi bi-list-check"></i> Rekap Belanja</a></li>
+        <li class="nav-item"><a class="nav-link {{if eq .Active "rekap-realisasi"}}active{{end}}" href="/bantuan/{{.Bantuan.ID}}/rekap-realisasi"><i class="bi bi-graph-up"></i> Rekap Realisasi</a></li>
       </ul>
       {{if .Summary}}
       <hr>
