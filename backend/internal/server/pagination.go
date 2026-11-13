@@ -27,7 +27,9 @@ func pageParams(r *http.Request) (int, int) {
 	switch perPage {
 	case 10, 25, 50, 100:
 	default:
-		perPage = 25
+		// Tampilkan lebih banyak baris secara default agar transaksi
+		// (mis. BKU) tidak "hilang" di halaman berikutnya.
+		perPage = 100
 	}
 	return page, perPage
 }
@@ -41,7 +43,7 @@ func pageURL(r *http.Request, page, perPage int) string {
 
 func buildPagination(r *http.Request, page, perPage, total int) Pagination {
 	if perPage <= 0 {
-		perPage = 25
+		perPage = 100
 	}
 	totalPages := (total + perPage - 1) / perPage
 	if totalPages < 1 {
@@ -74,7 +76,7 @@ func buildPagination(r *http.Request, page, perPage, total int) Pagination {
 
 func paginateSlice[T any](items []T, page, perPage int) []T {
 	if perPage <= 0 {
-		perPage = 25
+		perPage = 100
 	}
 	if page < 1 {
 		page = 1
