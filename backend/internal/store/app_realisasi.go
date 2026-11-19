@@ -110,22 +110,28 @@ func (s *Store) ListRealisasiTree(ctx context.Context, bantuanID int64) ([]Kegia
 
 // ListRealisasiPivot mengagregasi realisasi belanja berdasarkan level yang
 // dipilih (groups berisi urutan "kegiatan", "sub", "aktivitas", "komponen").
-// groups kosong => default semua level (paling detail). Mengembalikan baris
-// + grand total. Pagu dihitung per komponen (tidak terhitung ganda) dengan
-// cara mengagregasi realisasi ke level komponen terlebih dahulu.
+// groups kosong => default semua level (paling detail). Baris diambil dari
+// master komponen (bukan hanya yang punya realisasi) sehingga komponen/
+// aktivitas yang belum direalisasi tetap tampil dengan nilai realisasi 0.
+// Pagu dihitung per komponen (tidak terhitung ganda) dengan cara
+// mengagregasi realisasi ke level komponen terlebih dahulu.
 func (s *Store) ListRealisasiPivot(ctx context.Context, bantuanID int64, groups []string) ([]PivotRow, PivotRow, error) {
 	if len(groups) == 0 {
 		groups = []string{"kegiatan", "sub", "aktivitas", "komponen"}
 	}
 	rows, err := s.Pool.Query(ctx, `SELECT k.nama, sk.nama, a.nama, ko.nama, ko.pagu,
 		COALESCE(SUM(r.bruto),0)
-		FROM trx_invoice_realisasi r
-		JOIN trx_invoice i ON i.id = r.invoice_id
-		JOIN komponen ko ON ko.id = r.komponen_id
+		FROM komponen ko
 		JOIN aktivitas a ON a.id = ko.aktivitas_id
 		JOIN sub_kegiatan sk ON sk.id = a.sub_kegiatan_id
 		JOIN kegiatan k ON k.id = sk.kegiatan_id
-		WHERE i.bantuan_id=$1
+		LEFT JOIN (
+			SELECT r.komponen_id, r.bruto
+			FROM trx_invoice_realisasi r
+			JOIN trx_invoice i ON i.id = r.invoice_id
+			WHERE i.bantuan_id=$1
+		) r ON r.komponen_id = ko.id
+		WHERE k.bantuan_id=$1
 		GROUP BY ko.id, k.id, sk.id, a.id, k.nama, sk.nama, a.nama, ko.nama
 		ORDER BY k.id, sk.id, a.id, ko.id`, bantuanID)
 	if err != nil {
