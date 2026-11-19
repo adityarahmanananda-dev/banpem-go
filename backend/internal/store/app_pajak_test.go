@@ -2,6 +2,20 @@ package store
 
 import "testing"
 
+func TestValidTaxJenis(t *testing.T) {
+	valid := []string{"PPN", "PPh 21", "PPh 22", "PPh 23", "PPh 4 Ayat 2"}
+	for _, j := range valid {
+		if !ValidTaxJenis(j) {
+			t.Errorf("ValidTaxJenis(%q) = false, want true", j)
+		}
+	}
+	for _, j := range []string{"", "PPh", "PPh 4", "PPh 25", "pajak"} {
+		if ValidTaxJenis(j) {
+			t.Errorf("ValidTaxJenis(%q) = true, want false", j)
+		}
+	}
+}
+
 func TestNomorBuktiSetor(t *testing.T) {
 	cases := []struct {
 		ntbn, ntpn, want string

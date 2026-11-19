@@ -528,9 +528,7 @@ func parseSetorForm(r *http.Request) (store.SetorInput, error) {
 		return store.SetorInput{}, err
 	}
 	jenis := formStr(r, "jenis_pajak")
-	switch jenis {
-	case "PPN", "PPh 21", "PPh 22", "PPh 23":
-	default:
+	if !store.ValidTaxJenis(jenis) {
 		return store.SetorInput{}, store.ErrInvalidInput
 	}
 	in := store.SetorInput{

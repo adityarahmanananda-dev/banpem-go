@@ -75,18 +75,20 @@ type SetorInput struct {
 	Keterangan string
 }
 
-// CreateSetorPajak membuat 1 entri BKU 'setor_pajak', N baris REKAP_PAJAK,
-// dan 1 entri Bank 'setor_pajak'.
-func validTaxJenis(j string) bool {
+// ValidTaxJenis memastikan jenis pajak yang dipakai pada penyetoran dikenal.
+func ValidTaxJenis(j string) bool {
 	switch j {
-	case "PPN", "PPh 21", "PPh 22", "PPh 23":
+	case "PPN", "PPh 21", "PPh 22", "PPh 23", "PPh 4 Ayat 2":
 		return true
 	}
 	return false
 }
 
+// CreateSetorPajak membuat 1 entri BKU 'setor_pajak', N baris REKAP_PAJAK,
+// dan 1 entri Bank 'setor_pajak'.
+
 func (s *Store) CreateSetorPajak(ctx context.Context, in SetorInput) error {
-	if !validTaxJenis(in.JenisPajak) {
+	if !ValidTaxJenis(in.JenisPajak) {
 		return ErrInvalidInput
 	}
 	return s.WithBantuanTx(ctx, in.BantuanID, func(tx Tx) error {
@@ -165,7 +167,7 @@ func (e *storedError) Error() string { return e.msg }
 // UpdateSetorPajak mengedit entri setor: update ledger, rekap dihapus &
 // diinsert ulang, dan entri bank terkait di-update.
 func (s *Store) UpdateSetorPajak(ctx context.Context, bantuanID, setorID int64, in SetorInput) error {
-	if !validTaxJenis(in.JenisPajak) {
+	if !ValidTaxJenis(in.JenisPajak) {
 		return ErrInvalidInput
 	}
 	return s.WithBantuanTx(ctx, bantuanID, func(tx Tx) error {
@@ -296,7 +298,7 @@ func (s *Store) DeleteSetorPajak(ctx context.Context, bantuanID, setorID int64) 
 // excludeSetorID > 0, entri setor tersebut dikecualikan (dipakai saat edit agar
 // tagihan milik setor yang sedang diedit tidak ikut di-disable).
 func (s *Store) ListSetorJenisPerInvoice(ctx context.Context, bantuanID, excludeSetorID int64) (map[int64][]string, error) {
-	rows, err := s.Pool.Query(ctx, `SELECT rp.invoice_id, l.uraian
+	rows, err := s.Pool.Query(ctx, `SELECT rp.invoice_id, rp.jenis_pajak, l.uraian
 		FROM rekap_pajak rp JOIN trx_ledger l ON l.id = rp.setor_ledger_id
 		WHERE rp.bantuan_id=$1 AND rp.invoice_id IS NOT NULL AND rp.setor_ledger_id IS NOT NULL
 		  AND ($2 = 0 OR rp.setor_ledger_id <> $2)`, bantuanID, excludeSetorID)
@@ -307,11 +309,16 @@ func (s *Store) ListSetorJenisPerInvoice(ctx context.Context, bantuanID, exclude
 	out := map[int64][]string{}
 	for rows.Next() {
 		var iid int64
-		var uraian string
-		if err := rows.Scan(&iid, &uraian); err != nil {
+		var jenis, uraian string
+		if err := rows.Scan(&iid, &jenis, &uraian); err != nil {
 			return nil, err
 		}
-		j := InferJenisPajak(uraian)
+		// Utamakan kolom jenis_pajak (data baru); uraian hanya cadangan untuk
+		// baris lama yang kolomnya kosong.
+		j := jenis
+		if j == "" {
+			j = InferJenisPajak(uraian)
+		}
 		found := false
 		for _, x := range out[iid] {
 			if x == j {
